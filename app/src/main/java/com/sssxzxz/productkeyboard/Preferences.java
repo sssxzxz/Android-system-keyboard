@@ -17,4 +17,17 @@ final class Preferences {
     boolean vibration() { return data.getBoolean("vibration", false); }
     void vibration(boolean value) { data.edit().putBoolean("vibration", value).apply(); }
     void resetCandidates() { data.edit().remove("combos").remove("letters").remove("combo").remove("letter").apply(); }
+    static List<String> defaultOrder() { return new ArrayList<>(Arrays.asList("clear", "combo", "letter", "minus", "delete")); }
+    List<String> functionOrder() {
+        List<String> order = new ArrayList<>(Arrays.asList(data.getString("functionOrder", String.join(",", defaultOrder())).split(",")));
+        return validOrder(order) ? order : defaultOrder();
+    }
+    private static boolean validOrder(List<String> order) {
+        return order != null && order.size() == 5 && new HashSet<>(order).equals(new HashSet<>(defaultOrder()));
+    }
+    boolean functionsOnRight() { return data.getBoolean("functionsOnRight", false); }
+    void saveLayout(boolean onRight, List<String> order) {
+        if (!validOrder(order)) throw new IllegalArgumentException("All five function keys must occur exactly once");
+        data.edit().putBoolean("functionsOnRight", onRight).putString("functionOrder", String.join(",", order)).apply();
+    }
 }

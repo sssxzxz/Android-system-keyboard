@@ -16,6 +16,8 @@ public class ProductIme extends InputMethodService {
     private float unit = 1f;
     private boolean editingCombo;
     private String draft = "";
+    private List<String> layoutDraft;
+    private boolean layoutRight;
     @Override public boolean onEvaluateFullscreenMode() { return false; }
     @Override public View onCreateInputView() {
         prefs = new Preferences(this);
@@ -86,15 +88,77 @@ public class ProductIme extends InputMethodService {
     private void longPress(Button button, Runnable action) { button.setOnLongClickListener(v -> { feedback(v); action.run(); return true; }); }
     private void showKeyboard() {
         panel(true); LinearLayout row = new LinearLayout(this); root.addView(row,new LinearLayout.LayoutParams(-1,-1));
-        LinearLayout left = column(); add(row,left,1);
-        Button clear = button("全清", () -> clear(getCurrentInputConnection())); longPress(clear,this::settings); add(left,clear,1);
-        Button combo = button(prefs.current(true).toUpperCase(Locale.ROOT)+"\n组合", () -> commit(prefs.current(true))); longPress(combo,() -> candidates(true,false)); add(left,combo,1);
-        Button letter = button(prefs.current(false).toUpperCase(Locale.ROOT)+"\n字母", () -> commit(prefs.current(false))); longPress(letter,() -> candidates(false,false)); add(left,letter,1);
-        add(left,button("−",() -> commit("-")),1); add(left,button("退格",this::backspace),1);
-        LinearLayout right = column(); add(row,right,3);
+        LinearLayout functions = column();
+        for (String key : prefs.functionOrder()) add(functions, functionButton(key), 1);
+        LinearLayout right = column();
+        if (!prefs.functionsOnRight()) add(row,functions,1);
+        add(row,right,3);
+        if (prefs.functionsOnRight()) add(row,functions,1);
         for(int r=0;r<3;r++) { LinearLayout numbers = new LinearLayout(this); add(right,numbers,1); for(int c=1;c<=3;c++) { String value = Integer.toString(r*3+c); add(numbers,button(value,()->commit(value)),1); } }
         LinearLayout bottom = new LinearLayout(this); add(right,bottom,1); add(bottom,button("0",()->commit("0")),2);
         Button search = button("搜索", this::search); search.setTextColor(Color.rgb(120,221,208)); add(bottom,search,1);
+    }
+    private String functionName(String key) {
+        switch (key) {
+            case "clear": return "全清";
+            case "combo": return "组合";
+            case "letter": return "字母";
+            case "minus": return "减号";
+            default: return "退格";
+        }
+    }
+    private Button functionButton(String key) {
+        Button b;
+        switch (key) {
+            case "clear": b = button("全清", () -> clear(getCurrentInputConnection())); longPress(b,this::settings); return b;
+            case "combo": b = button(prefs.current(true).toUpperCase(Locale.ROOT)+"\n组合", () -> commit(prefs.current(true))); longPress(b,() -> candidates(true,false)); return b;
+            case "letter": b = button(prefs.current(false).toUpperCase(Locale.ROOT)+"\n字母", () -> commit(prefs.current(false))); longPress(b,() -> candidates(false,false)); return b;
+            case "minus": return button("−", () -> commit("-"));
+            default: return button("退格", this::backspace);
+        }
+    }
+    private void openLayoutEditor() {
+        layoutDraft = prefs.functionOrder(); layoutRight = prefs.functionsOnRight(); layoutEditor();
+    }
+    private void layoutEditor() {
+        panel(false);
+        LinearLayout header = new LinearLayout(this); root.addView(header,new LinearLayout.LayoutParams(-1,dp(44)));
+        add(header,button("取消",this::settings),1);
+        add(header,button(layoutRight ? "功能列：右侧 ⇄" : "功能列：左侧 ⇄", () -> {layoutRight = !layoutRight; layoutEditor();}),3);
+        TextView hint = new TextView(this); hint.setText("长按功能键拖到目标位置；点击保存生效"); hint.setTextColor(Color.rgb(179,192,205)); hint.setTextSize(12); root.addView(hint);
+        ScrollView scroll = new ScrollView(this); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        LinearLayout preview = new LinearLayout(this); scroll.addView(preview,new ScrollView.LayoutParams(-1,dp(230)));
+        LinearLayout functions = column();
+        for (String key : layoutDraft) {
+            Button item = button("↕ " + functionName(key), () -> {}); item.setTextSize(15);
+            item.setContentDescription("拖动排列" + functionName(key));
+            item.setOnLongClickListener(v -> { feedback(v); return v.startDragAndDrop(ClipData.newPlainText("layout",key),new View.DragShadowBuilder(v),key,0); });
+            item.setOnDragListener((v,event) -> {
+                switch(event.getAction()) {
+                    case DragEvent.ACTION_DRAG_STARTED: return event.getLocalState() instanceof String && layoutDraft.contains((String)event.getLocalState());
+                    case DragEvent.ACTION_DRAG_ENTERED: v.setAlpha(.5f); return true;
+                    case DragEvent.ACTION_DRAG_EXITED:
+                    case DragEvent.ACTION_DRAG_ENDED: v.setAlpha(1f); return true;
+                    case DragEvent.ACTION_DROP:
+                        String source = (String)event.getLocalState();
+                        int target = layoutDraft.indexOf(key);
+                        if (target >= 0 && layoutDraft.remove(source)) { layoutDraft.add(target,source); host.post(this::layoutEditor); }
+                        return true;
+                    default: return true;
+                }
+            });
+            add(functions,item,1);
+        }
+        LinearLayout numbers = column();
+        for (String label : new String[]{"1    2    3", "4    5    6", "7    8    9", "0       搜索"}) {
+            TextView text = new TextView(this); text.setText(label); text.setTextSize(18); text.setTextColor(Color.rgb(179,192,205)); text.setGravity(Gravity.CENTER); add(numbers,text,1);
+        }
+        if (!layoutRight) add(preview,functions,2);
+        add(preview,numbers,3);
+        if (layoutRight) add(preview,functions,2);
+        LinearLayout actions = new LinearLayout(this); root.addView(actions,new LinearLayout.LayoutParams(-1,dp(44)));
+        Button reset = button("恢复默认", () -> { layoutRight = false; layoutDraft = Preferences.defaultOrder(); layoutEditor(); }); reset.setTextSize(16); add(actions,reset,1);
+        add(actions,button("保存", () -> { prefs.saveLayout(layoutRight,layoutDraft); showKeyboard(); }),1);
     }
     private void toolbar(String title, String action, Runnable run) {
         LinearLayout bar = new LinearLayout(this); root.addView(bar,new LinearLayout.LayoutParams(-1,dp(44)));
@@ -131,14 +195,17 @@ public class ProductIme extends InputMethodService {
     }
     private void settings() {
         panel(false); toolbar("设置",null,null);
+        ScrollView scroll = new ScrollView(this); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        LinearLayout options = column(); scroll.addView(options);
+        Button layout = button("按键布局",this::openLayoutEditor); options.addView(layout,new LinearLayout.LayoutParams(-1,dp(48)));
         Button resize=button("上下拖动此处调整大小 · "+Math.round(prefs.scale()*100)+"%",()->{});
         final float[] initial=new float[2];
         resize.setOnTouchListener((v,event)->{ if(event.getAction()==MotionEvent.ACTION_DOWN){initial[0]=event.getRawY();initial[1]=prefs.scale();return true;} if(event.getAction()==MotionEvent.ACTION_MOVE){prefs.scale(initial[1]+(initial[0]-event.getRawY())/dp(400)); resize.setText("大小 · "+Math.round(prefs.scale()*100)+"%");return true;} if(event.getAction()==MotionEvent.ACTION_UP){v.performClick();settings();return true;} return true; });
-        add(root,resize,1);
-        Switch vibration=new Switch(this); vibration.setText("按键震动"); vibration.setTextColor(Color.rgb(235,241,247)); vibration.setChecked(prefs.vibration()); vibration.setOnCheckedChangeListener((b,checked)->prefs.vibration(checked)); add(root,vibration,1);
-        add(root,button("恢复默认大小",()->{prefs.scale(1);settings();}),1);
-        add(root,button("恢复默认候选",()->{prefs.resetCandidates();Toast.makeText(this,"候选已恢复为 zp、c",Toast.LENGTH_SHORT).show();}),1);
-        add(root,button("切换其他输入法",()->((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showInputMethodPicker()),1);
+        options.addView(resize,new LinearLayout.LayoutParams(-1,dp(48)));
+        Switch vibration=new Switch(this); vibration.setText("按键震动"); vibration.setTextColor(Color.rgb(235,241,247)); vibration.setChecked(prefs.vibration()); vibration.setOnCheckedChangeListener((b,checked)->prefs.vibration(checked)); options.addView(vibration,new LinearLayout.LayoutParams(-1,dp(48)));
+        options.addView(button("恢复默认大小",()->{prefs.scale(1);settings();}),new LinearLayout.LayoutParams(-1,dp(48)));
+        options.addView(button("恢复默认候选",()->{prefs.resetCandidates();Toast.makeText(this,"候选已恢复为 zp、c",Toast.LENGTH_SHORT).show();}),new LinearLayout.LayoutParams(-1,dp(48)));
+        options.addView(button("切换其他输入法",()->((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showInputMethodPicker()),new LinearLayout.LayoutParams(-1,dp(48)));
     }
 }
 

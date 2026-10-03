@@ -8,6 +8,26 @@ import android.view.inputmethod.BaseInputConnection;
 import java.util.Arrays;
 
 public class KeyboardTest extends AndroidTestCase {
+    public void testLayoutPersistsAndResetPreservesOtherSettings() {
+        Preferences p = new Preferences(getContext());
+        assertFalse(p.functionsOnRight()); assertEquals(Preferences.defaultOrder(),p.functionOrder());
+        p.scale(.8f); p.vibration(true); p.save(true,Arrays.asList("zp","ab")); p.select(true,"ab");
+        java.util.List<String> order = Arrays.asList("delete","minus","clear","letter","combo");
+        p.saveLayout(true,order);
+        Preferences loaded = new Preferences(getContext()); assertTrue(loaded.functionsOnRight()); assertEquals(order,loaded.functionOrder());
+        java.util.List<String> draft = loaded.functionOrder(); java.util.Collections.reverse(draft);
+        assertEquals(order,loaded.functionOrder());
+        loaded.saveLayout(false,Preferences.defaultOrder());
+        assertFalse(loaded.functionsOnRight()); assertEquals(Preferences.defaultOrder(),loaded.functionOrder());
+        assertEquals(.8f,loaded.scale()); assertTrue(loaded.vibration()); assertEquals("ab",loaded.current(true)); assertEquals(Arrays.asList("zp","ab"),loaded.list(true));
+    }
+    public void testInvalidLayoutCannotRemoveSettingsKey() {
+        Preferences p = new Preferences(getContext());
+        try { p.saveLayout(true,Arrays.asList("delete","minus","combo","letter","combo")); fail("Invalid order accepted"); } catch (IllegalArgumentException expected) { }
+        assertFalse(p.functionsOnRight()); assertEquals(Preferences.defaultOrder(),p.functionOrder());
+        getContext().getSharedPreferences("keyboard",0).edit().putString("functionOrder","bad").commit();
+        assertEquals(Preferences.defaultOrder(),new Preferences(getContext()).functionOrder());
+    }
     public void testSearchSendsOnlySearchActionWithoutChangingText() {
         final int[] calls = {0};
         BaseInputConnection ic = new BaseInputConnection(new android.view.View(getContext()),true) {

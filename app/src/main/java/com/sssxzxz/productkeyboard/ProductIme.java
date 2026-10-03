@@ -19,7 +19,9 @@ public class ProductIme extends InputMethodService {
     @Override public boolean onEvaluateFullscreenMode() { return false; }
     @Override public View onCreateInputView() {
         prefs = new Preferences(this);
-        host = new FrameLayout(this); host.setBackgroundColor(Color.rgb(225,231,236));
+        host = new FrameLayout(this); host.setBackgroundColor(Color.rgb(18,23,30));
+        getWindow().getWindow().setNavigationBarColor(Color.rgb(18,23,30));
+        getWindow().getWindow().getDecorView().setSystemUiVisibility(0);
         host.setPadding(0, 0, 0, dp(24));
         host.setOnApplyWindowInsetsListener((view, insets) -> {
             view.setPadding(0, 0, 0, Math.max(dp(24), insets.getSystemWindowInsetBottom()));
@@ -43,9 +45,9 @@ public class ProductIme extends InputMethodService {
     private Button button(String label, Runnable action) {
         Button b = new Button(this); b.setText(label); b.setAllCaps(false); b.setTextSize(Math.max(12, (label.contains("\n") ? 16 : 21)*unit));
         b.setIncludeFontPadding(false);
-        b.setTextColor(Color.rgb(24,39,52)); b.setPadding(0,0,0,0); b.setMinHeight(0); b.setMinimumHeight(0); b.setMinWidth(0); b.setMinimumWidth(0);
-        GradientDrawable bg = new GradientDrawable(); bg.setColor(Color.WHITE); bg.setCornerRadius(dp(8*unit));
-        b.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x33007878), bg, null));
+        b.setTextColor(Color.rgb(235,241,247)); b.setPadding(0,0,0,0); b.setMinHeight(0); b.setMinimumHeight(0); b.setMinWidth(0); b.setMinimumWidth(0);
+        GradientDrawable bg = new GradientDrawable(); bg.setColor(Color.rgb(39,49,62)); bg.setCornerRadius(dp(8*unit));
+        b.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x5578DDD0), bg, null));
         b.setSoundEffectsEnabled(false);
         b.setOnClickListener(v -> { feedback(v); action.run(); }); return b;
     }
@@ -56,6 +58,15 @@ public class ProductIme extends InputMethodService {
         lp.setMargins(dp(2*unit),dp(2*unit),dp(2*unit),dp(2*unit)); parent.addView(child, lp);
     }
     private void commit(String value) { InputConnection ic = getCurrentInputConnection(); if(ic != null) ic.commitText(value, 1); }
+    static boolean search(InputConnection ic) {
+        if (ic == null) return false;
+        ic.finishComposingText();
+        // Ask the focused editor to search; never insert text or submit a different action.
+        return ic.performEditorAction(EditorInfo.IME_ACTION_SEARCH);
+    }
+    private void search() {
+        if (!search(getCurrentInputConnection())) Toast.makeText(this,"搜索未发送，请重新点击应用的搜索框",Toast.LENGTH_SHORT).show();
+    }
     void clear(InputConnection ic) {
         if (ic == null) return;
         ic.beginBatchEdit();
@@ -82,7 +93,8 @@ public class ProductIme extends InputMethodService {
         add(left,button("−",() -> commit("-")),1); add(left,button("退格",this::backspace),1);
         LinearLayout right = column(); add(row,right,3);
         for(int r=0;r<3;r++) { LinearLayout numbers = new LinearLayout(this); add(right,numbers,1); for(int c=1;c<=3;c++) { String value = Integer.toString(r*3+c); add(numbers,button(value,()->commit(value)),1); } }
-        LinearLayout bottom = new LinearLayout(this); add(right,bottom,1); add(bottom,button("0",()->commit("0")),2); add(bottom,button("00",()->commit("00")),1);
+        LinearLayout bottom = new LinearLayout(this); add(right,bottom,1); add(bottom,button("0",()->commit("0")),2);
+        Button search = button("搜索", this::search); search.setTextColor(Color.rgb(120,221,208)); add(bottom,search,1);
     }
     private void toolbar(String title, String action, Runnable run) {
         LinearLayout bar = new LinearLayout(this); root.addView(bar,new LinearLayout.LayoutParams(-1,dp(44)));
@@ -109,7 +121,7 @@ public class ProductIme extends InputMethodService {
     }
     private void addCandidate() {
         panel(false); toolbar("新增候选",null,null);
-        TextView value = new TextView(this); value.setText("候选："+draft+"  （"+(editingCombo ? "2–8 个字母" : "1 个字母")+"）"); value.setTextSize(18); root.addView(value);
+        TextView value = new TextView(this); value.setText("候选："+draft+"  （"+(editingCombo ? "2–8 个字母" : "1 个字母")+"）"); value.setTextColor(Color.rgb(235,241,247)); value.setTextSize(18); root.addView(value);
         String[] rows={"abcdefghi","jklmnopqr","stuvwxyz"};
         for(String letters:rows) { LinearLayout row=new LinearLayout(this); add(root,row,1); for(char ch:letters.toCharArray()) { String s=String.valueOf(ch); add(row,button(s,()->{if(draft.length() < (editingCombo?8:1)) draft+=s; addCandidate();}),1); } }
         LinearLayout actions=new LinearLayout(this); add(root,actions,1);
@@ -123,7 +135,7 @@ public class ProductIme extends InputMethodService {
         final float[] initial=new float[2];
         resize.setOnTouchListener((v,event)->{ if(event.getAction()==MotionEvent.ACTION_DOWN){initial[0]=event.getRawY();initial[1]=prefs.scale();return true;} if(event.getAction()==MotionEvent.ACTION_MOVE){prefs.scale(initial[1]+(initial[0]-event.getRawY())/dp(400)); resize.setText("大小 · "+Math.round(prefs.scale()*100)+"%");return true;} if(event.getAction()==MotionEvent.ACTION_UP){v.performClick();settings();return true;} return true; });
         add(root,resize,1);
-        Switch vibration=new Switch(this); vibration.setText("按键震动"); vibration.setChecked(prefs.vibration()); vibration.setOnCheckedChangeListener((b,checked)->prefs.vibration(checked)); add(root,vibration,1);
+        Switch vibration=new Switch(this); vibration.setText("按键震动"); vibration.setTextColor(Color.rgb(235,241,247)); vibration.setChecked(prefs.vibration()); vibration.setOnCheckedChangeListener((b,checked)->prefs.vibration(checked)); add(root,vibration,1);
         add(root,button("恢复默认大小",()->{prefs.scale(1);settings();}),1);
         add(root,button("恢复默认候选",()->{prefs.resetCandidates();Toast.makeText(this,"候选已恢复为 zp、c",Toast.LENGTH_SHORT).show();}),1);
         add(root,button("切换其他输入法",()->((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showInputMethodPicker()),1);

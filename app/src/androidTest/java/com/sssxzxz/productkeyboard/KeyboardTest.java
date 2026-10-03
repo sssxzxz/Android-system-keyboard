@@ -8,6 +8,18 @@ import android.view.inputmethod.BaseInputConnection;
 import java.util.Arrays;
 
 public class KeyboardTest extends AndroidTestCase {
+    public void testSearchSendsOnlySearchActionWithoutChangingText() {
+        final int[] calls = {0};
+        BaseInputConnection ic = new BaseInputConnection(new android.view.View(getContext()),true) {
+            @Override public boolean performEditorAction(int action) {
+                assertEquals(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH, action);
+                calls[0]++; return true;
+            }
+            @Override public boolean commitText(CharSequence text, int cursor) { fail("Search must not insert text"); return false; }
+            @Override public boolean sendKeyEvent(android.view.KeyEvent event) { fail("Search must not send Enter"); return false; }
+        };
+        assertTrue(ProductIme.search(ic)); assertEquals(1,calls[0]); assertFalse(ProductIme.search(null));
+    }
     @Override protected void setUp() throws Exception {
         super.setUp(); getContext().getSharedPreferences("keyboard",0).edit().clear().commit();
     }

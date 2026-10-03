@@ -24,6 +24,12 @@ public class SetupActivity extends Activity {
         pick.setOnClickListener(v -> ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showInputMethodPicker());
         layout.addView(pick);
         EditText test = new EditText(this); test.setHint("在这里试输型号"); test.setSaveEnabled(false);
+        test.setSingleLine(true);
+        test.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
+        test.setOnEditorActionListener((view, action, event) -> {
+            if (action != android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) return false;
+            Toast.makeText(this,"已收到搜索操作",Toast.LENGTH_SHORT).show(); return true;
+        });
         layout.addView(test);
         ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.addView(layout);
         setContentView(scroll);

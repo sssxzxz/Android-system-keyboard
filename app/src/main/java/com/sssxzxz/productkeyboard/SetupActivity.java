@@ -27,8 +27,7 @@ public class SetupActivity extends Activity {
         layout.addView(test);
         setContentView(layout);
         layout.setOnApplyWindowInsetsListener((v, insets) -> {
-            android.graphics.Insets bars = insets.getInsets(android.view.WindowInsets.Type.systemBars());
-            v.setPadding(28, bars.top + 28, 28, bars.bottom + 16); return insets;
+            v.setPadding(28, insets.getSystemWindowInsetTop() + 28, 28, insets.getSystemWindowInsetBottom() + 16); return insets;
         });
     }
 }

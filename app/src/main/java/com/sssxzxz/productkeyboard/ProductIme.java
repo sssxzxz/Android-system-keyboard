@@ -115,7 +115,7 @@ public class ProductIme extends InputMethodService {
         panel(false); toolbar("设置",null,null);
         Button resize=button("上下拖动此处调整大小 · "+Math.round(prefs.scale()*100)+"%",()->{});
         final float[] initial=new float[2];
-        resize.setOnTouchListener((v,event)->{ if(event.getAction()==MotionEvent.ACTION_DOWN){initial[0]=event.getRawY();initial[1]=prefs.scale();return true;} if(event.getAction()==MotionEvent.ACTION_MOVE){prefs.scale(initial[1]+(initial[0]-event.getRawY())/dp(400)); resize.setText("大小 · "+Math.round(prefs.scale()*100)+"%");return true;} if(event.getAction()==MotionEvent.ACTION_UP){settings();return true;} return true; });
+        resize.setOnTouchListener((v,event)->{ if(event.getAction()==MotionEvent.ACTION_DOWN){initial[0]=event.getRawY();initial[1]=prefs.scale();return true;} if(event.getAction()==MotionEvent.ACTION_MOVE){prefs.scale(initial[1]+(initial[0]-event.getRawY())/dp(400)); resize.setText("大小 · "+Math.round(prefs.scale()*100)+"%");return true;} if(event.getAction()==MotionEvent.ACTION_UP){v.performClick();settings();return true;} return true; });
         add(root,resize,1);
         Switch vibration=new Switch(this); vibration.setText("按键震动"); vibration.setChecked(prefs.vibration()); vibration.setOnCheckedChangeListener((b,checked)->prefs.vibration(checked)); add(root,vibration,1);
         add(root,button("恢复默认大小",()->{prefs.scale(1);settings();}),1);
@@ -123,3 +123,4 @@ public class ProductIme extends InputMethodService {
         add(root,button("切换其他输入法",()->((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showInputMethodPicker()),1);
     }
 }
+

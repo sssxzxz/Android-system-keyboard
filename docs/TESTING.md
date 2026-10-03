@@ -1,5 +1,9 @@
 # 第一版验收
 
+2026-10-03 本地验证：debug APK 编译与签名验证通过；Android 15 模拟器安装成功；3 项仪器测试通过（配置持久化/当前项修复、缩放边界、光标中间全清）。实际点击输出 `zp12c00`、全清及长按组合候选已验证；横竖屏布局已查看。Lint 无错误，剩余提示为中文文本国际化及触摸控件可访问性；Google 表格、候选拖动手感及真机震动仍需手机验收。
+
+GitHub 状态：工作流已写入源码，本机 Git 无写入凭据，尚未推送或运行远程构建。
+
 自动检查：`./gradlew assembleDebug assembleDebugAndroidTest lintDebug`。
 连接专用测试设备或模拟器后：`./gradlew connectedDebugAndroidTest`。
 仪器测试会重置该设备上的商品键盘配置，请勿对已配置好的日用设备执行。

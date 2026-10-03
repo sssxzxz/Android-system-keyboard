@@ -25,9 +25,15 @@ public class SetupActivity extends Activity {
         layout.addView(pick);
         EditText test = new EditText(this); test.setHint("在这里试输型号"); test.setSaveEnabled(false);
         layout.addView(test);
-        setContentView(layout);
-        layout.setOnApplyWindowInsetsListener((v, insets) -> {
-            v.setPadding(28, insets.getSystemWindowInsetTop() + 28, 28, insets.getSystemWindowInsetBottom() + 16); return insets;
+        ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.addView(layout);
+        setContentView(scroll);
+        scroll.setOnApplyWindowInsetsListener((v, insets) -> {
+            int bottom = insets.getSystemWindowInsetBottom();
+            if (android.os.Build.VERSION.SDK_INT >= 30) bottom = Math.max(bottom, insets.getInsets(android.view.WindowInsets.Type.ime()).bottom);
+            layout.setPadding(28, insets.getSystemWindowInsetTop() + 28, 28, 16);
+            scroll.setPadding(0, 0, 0, bottom);
+            if (test.hasFocus()) test.post(() -> test.requestRectangleOnScreen(new android.graphics.Rect(0,0,test.getWidth(),test.getHeight()),true));
+            return insets;
         });
     }
 }

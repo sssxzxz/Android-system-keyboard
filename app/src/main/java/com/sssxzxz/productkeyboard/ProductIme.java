@@ -20,6 +20,11 @@ public class ProductIme extends InputMethodService {
     @Override public View onCreateInputView() {
         prefs = new Preferences(this);
         host = new FrameLayout(this); host.setBackgroundColor(Color.rgb(225,231,236));
+        host.setPadding(0, 0, 0, dp(24));
+        host.setOnApplyWindowInsetsListener((view, insets) -> {
+            view.setPadding(0, 0, 0, Math.max(dp(24), insets.getSystemWindowInsetBottom()));
+            return insets;
+        });
         showKeyboard(); return host;
     }
     @Override public void onStartInputView(EditorInfo info, boolean restarting) { super.onStartInputView(info, restarting); if (host != null) showKeyboard(); }
@@ -29,14 +34,15 @@ public class ProductIme extends InputMethodService {
         host.removeAllViews(); root = column();
         float screenWidth = getResources().getDisplayMetrics().widthPixels / getResources().getDisplayMetrics().density;
         float screenHeight = getResources().getDisplayMetrics().heightPixels / getResources().getDisplayMetrics().density;
-        float base = Math.min(screenWidth, Math.min(480f, screenHeight * 1.18f));
+        float base = Math.min(screenWidth, Math.min(480f, screenHeight * .72f));
         unit = base / 400f * prefs.scale();
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(base * prefs.scale()), keyboard ? dp(288 * unit) : dp(Math.min(330, screenHeight * .65f)), Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);
         root.setPadding(dp(4*unit), dp(4*unit), dp(4*unit), dp(4*unit));
         host.addView(root, lp);
     }
     private Button button(String label, Runnable action) {
-        Button b = new Button(this); b.setText(label); b.setAllCaps(false); b.setTextSize(Math.max(12, 21*unit));
+        Button b = new Button(this); b.setText(label); b.setAllCaps(false); b.setTextSize(Math.max(12, (label.contains("\n") ? 16 : 21)*unit));
+        b.setIncludeFontPadding(false);
         b.setTextColor(Color.rgb(24,39,52)); b.setPadding(0,0,0,0); b.setMinHeight(0); b.setMinimumHeight(0); b.setMinWidth(0); b.setMinimumWidth(0);
         GradientDrawable bg = new GradientDrawable(); bg.setColor(Color.WHITE); bg.setCornerRadius(dp(8*unit));
         b.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x33007878), bg, null));

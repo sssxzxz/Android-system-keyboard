@@ -6,6 +6,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".CandidateEditorActivity" android:windowSoftInputMode="adjustResize" android:exported="false" />
         <service android:name=".ProductIme" android:label="商品键盘" android:permission="android.permission.BIND_INPUT_METHOD" android:exported="true">
             <intent-filter><action android:name="android.view.InputMethod" /></intent-filter>
             <meta-data android:name="android.view.im" android:resource="@xml/input_method" />

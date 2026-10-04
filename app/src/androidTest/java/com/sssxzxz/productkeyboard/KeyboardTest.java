@@ -8,6 +8,41 @@ import android.view.inputmethod.BaseInputConnection;
 import java.util.Arrays;
 
 public class KeyboardTest extends AndroidTestCase {
+    public void testCustomCharacterLimits() {
+        assertFalse(CustomText.valid(""));
+        assertTrue(CustomText.valid("1234567890"));
+        assertFalse(CustomText.valid("12345678901"));
+        assertTrue(CustomText.valid("你好+−×÷,A1"));
+        assertEquals(1,CustomText.length("😀"));
+        assertEquals(1,CustomText.length("e\u0301"));
+        assertTrue(CustomText.valid("😀😀😀😀😀😀😀😀😀😀"));
+        assertFalse(CustomText.valid("😀😀😀😀😀😀😀😀😀😀😀"));
+    }
+    public void testBothCustomSlotsRoundTripAndRename() {
+        java.util.List<String> values = Arrays.asList("A12", "你好", ",", "a,b", "+−×÷", "😀", "\"\\", " x ", "a\nb");
+        for (boolean first : new boolean[]{true,false}) {
+            Preferences p = new Preferences(getContext());
+            p.save(first,values); p.select(first,"a,b");
+            p = new Preferences(getContext());
+            assertEquals(values,p.list(first)); assertEquals("a,b",p.current(first));
+            p.replace(first,"a,b","更新"); assertEquals("更新",p.current(first));
+            assertEquals("更新",p.list(first).get(3));
+            try { p.replace(first,"更新","你好"); fail("Duplicate accepted"); } catch (IllegalArgumentException expected) { }
+            assertEquals("更新",p.current(first));
+            try { p.save(first,Arrays.asList("12345678901")); fail("Too long"); } catch (IllegalArgumentException expected) { }
+            try { p.save(first,java.util.Collections.emptyList()); fail("Empty list"); } catch (IllegalArgumentException expected) { }
+        }
+    }
+    public void testLegacyMigrationAndIndependentReset() {
+        getContext().getSharedPreferences("keyboard",0).edit().putString("combos","zp,ab")
+            .putString("combo","ab").putString("letters","c,x").putString("letter","x").commit();
+        Preferences p = new Preferences(getContext());
+        assertEquals(Arrays.asList("zp","ab"),p.list(true)); assertEquals("ab",p.current(true));
+        assertEquals("x",p.current(false));
+        p.replace(true,"ab","+,中");
+        p = new Preferences(getContext()); assertEquals("+,中",p.current(true)); assertEquals("x",p.current(false));
+        p.resetCandidates(); assertEquals(Arrays.asList("zp"),p.list(true)); assertEquals(Arrays.asList("c"),p.list(false));
+    }
     public void testLayoutPersistsAndResetPreservesOtherSettings() {
         Preferences p = new Preferences(getContext());
         assertFalse(p.functionsOnRight()); assertEquals(Preferences.defaultOrder(),p.functionOrder());

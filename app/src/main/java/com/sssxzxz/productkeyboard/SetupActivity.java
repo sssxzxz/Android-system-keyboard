@@ -14,7 +14,7 @@ public class SetupActivity extends Activity {
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(28, 60, 28, 28);
         TextView title = new TextView(this);
-        title.setText("商品键盘\n\n专用于商品型号输入。\n长按全清进入设置；长按组合或字母编辑候选。\n所有配置只保存在本机，不联网、不记录输入历史。\n");
+        title.setText("商品键盘\n\n专用于商品型号输入。\n长按全清进入设置；长按自定义键（初始 zp、c）选择或编辑候选。\n所有配置只保存在本机，不联网、不记录输入历史。\n");
         title.setTextSize(20);
         layout.addView(title);
         Button enable = new Button(this); enable.setText("1 · 启用商品键盘");

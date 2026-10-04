@@ -14,8 +14,8 @@ public class ProductIme extends InputMethodService {
     private LinearLayout root;
     private FrameLayout host;
     private float unit = 1f;
-    private boolean editingCombo;
-    private String draft = "";
+
+
     private List<String> layoutDraft;
     private boolean layoutRight;
     @Override public boolean onEvaluateFullscreenMode() { return false; }
@@ -101,8 +101,8 @@ public class ProductIme extends InputMethodService {
     private String functionName(String key) {
         switch (key) {
             case "clear": return "全清";
-            case "combo": return "组合";
-            case "letter": return "字母";
+            case "combo": return "自定义 1";
+            case "letter": return "自定义 2";
             case "minus": return "减号";
             default: return "退格";
         }
@@ -111,11 +111,30 @@ public class ProductIme extends InputMethodService {
         Button b;
         switch (key) {
             case "clear": b = button("全清", () -> clear(getCurrentInputConnection())); longPress(b,this::settings); return b;
-            case "combo": b = button(prefs.current(true).toUpperCase(Locale.ROOT)+"\n组合", () -> commit(prefs.current(true))); longPress(b,() -> candidates(true,false)); return b;
-            case "letter": b = button(prefs.current(false).toUpperCase(Locale.ROOT)+"\n字母", () -> commit(prefs.current(false))); longPress(b,() -> candidates(false,false)); return b;
+            case "combo": return customButton(true);
+            case "letter": return customButton(false);
             case "minus": return button("−", () -> commit("-"));
             default: return button("退格", this::backspace);
         }
+    }
+    private Button customButton(boolean first) {
+        Button b = button(prefs.current(first), () -> commit(prefs.current(first)));
+        fitContent(b);
+        b.setContentDescription(prefs.current(first) + "，长按选择或编辑自定义");
+        longPress(b, () -> candidates(first,false));
+        return b;
+    }
+    private void fitContent(Button b) {
+        b.setMaxLines(2);
+        b.setPadding(dp(3),0,dp(3),0);
+        b.setAutoSizeTextTypeUniformWithConfiguration(8, Math.max(12,Math.round(21*unit)), 1, android.util.TypedValue.COMPLEX_UNIT_SP);
+    }
+    private void editCandidate(boolean first, String original) {
+        android.content.Intent intent = new android.content.Intent(this, CandidateEditorActivity.class);
+        intent.putExtra("first",first);
+        if (original != null) intent.putExtra("original",original);
+        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
     }
     private void openLayoutEditor() {
         layoutDraft = prefs.functionOrder(); layoutRight = prefs.functionsOnRight(); layoutEditor();
@@ -165,33 +184,26 @@ public class ProductIme extends InputMethodService {
         add(bar,button("返回",this::showKeyboard),1); add(bar,button(title,()->{}),2); if(action != null) add(bar,button(action,run),1);
     }
     private void candidates(boolean combo, boolean editing) {
-        panel(false); toolbar(combo ? "组合候选" : "字母候选", editing ? "完成" : "编辑", () -> candidates(combo,!editing));
+        panel(false); toolbar(combo ? "自定义 1" : "自定义 2", editing ? "完成" : "编辑", () -> candidates(combo,!editing));
         ScrollView scroll = new ScrollView(this); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1)); LinearLayout list = column(); scroll.addView(list);
         for(String value : prefs.list(combo)) {
-            LinearLayout row = new LinearLayout(this); list.addView(row,new LinearLayout.LayoutParams(-1,dp(48)));
-            Button select = button((value.equals(prefs.current(combo)) ? "✓ " : "") + value.toUpperCase(Locale.ROOT), () -> {prefs.select(combo,value); if(!editing) showKeyboard(); else candidates(combo,true);}); add(row,select,3);
+            LinearLayout item = column(); list.addView(item);
+            LinearLayout row = new LinearLayout(this); item.addView(row,new LinearLayout.LayoutParams(-1,dp(48)));
+            Button select = button((value.equals(prefs.current(combo)) ? "✓ " : "") + value, () -> {prefs.select(combo,value); if(!editing) showKeyboard(); else candidates(combo,true);}); fitContent(select); add(row,select,3);
             if(editing) {
+                LinearLayout actions = new LinearLayout(this); item.addView(actions,new LinearLayout.LayoutParams(-1,dp(44)));
+                Button modify = button("修改", () -> editCandidate(combo,value)); modify.setTextSize(13); add(actions,modify,1);
                 Button handle = button("↕",()->Toast.makeText(this,"长按此处，拖到目标候选上松开",Toast.LENGTH_SHORT).show()); handle.setContentDescription("长按拖动排序 "+value);
-                longPress(handle,()->handle.startDragAndDrop(ClipData.newPlainText("candidate",value),new View.DragShadowBuilder(handle),value,0)); add(row,handle,1);
-                add(row,button("删除",()->{ List<String> values=prefs.list(combo); if(values.size()==1) { Toast.makeText(this,"至少保留一个候选",Toast.LENGTH_SHORT).show(); return; } values.remove(value); prefs.save(combo,values); candidates(combo,true); }),1);
-                row.setOnDragListener((v,event)-> {
+                longPress(handle,()->handle.startDragAndDrop(ClipData.newPlainText("candidate",value),new View.DragShadowBuilder(handle),value,0)); add(actions,handle,1);
+                add(actions,button("删除",()->{ List<String> values=prefs.list(combo); if(values.size()==1) { Toast.makeText(this,"至少保留一个候选",Toast.LENGTH_SHORT).show(); return; } values.remove(value); prefs.save(combo,values); candidates(combo,true); }),1);
+                item.setOnDragListener((v,event)-> {
                     if(event.getAction()==DragEvent.ACTION_DRAG_STARTED) return event.getLocalState() instanceof String;
                     if(event.getAction()==DragEvent.ACTION_DROP) { List<String> values=prefs.list(combo); String source=(String)event.getLocalState(); int target=values.indexOf(value); if(values.remove(source)) { values.add(target,source); prefs.save(combo,values); host.post(()->candidates(combo,true)); } }
                     return true;
                 });
             }
         }
-        if(editing) { Button add = button("＋ 新增候选",()->{editingCombo=combo;draft=""; addCandidate();}); root.addView(add,new LinearLayout.LayoutParams(-1,dp(46))); }
-    }
-    private void addCandidate() {
-        panel(false); toolbar("新增候选",null,null);
-        TextView value = new TextView(this); value.setText("候选："+draft+"  （"+(editingCombo ? "2–8 个字母" : "1 个字母")+"）"); value.setTextColor(Color.rgb(235,241,247)); value.setTextSize(18); root.addView(value);
-        String[] rows={"abcdefghi","jklmnopqr","stuvwxyz"};
-        for(String letters:rows) { LinearLayout row=new LinearLayout(this); add(root,row,1); for(char ch:letters.toCharArray()) { String s=String.valueOf(ch); add(row,button(s,()->{if(draft.length() < (editingCombo?8:1)) draft+=s; addCandidate();}),1); } }
-        LinearLayout actions=new LinearLayout(this); add(root,actions,1);
-        add(actions,button("取消",()->candidates(editingCombo,true)),1);
-        add(actions,button("退格",()->{if(!draft.isEmpty()) draft=draft.substring(0,draft.length()-1); addCandidate();}),1);
-        add(actions,button("保存",()->{if(draft.length()<(editingCombo?2:1))return; List<String> values=prefs.list(editingCombo); if(!values.contains(draft))values.add(draft); prefs.save(editingCombo,values); draft=""; candidates(editingCombo,true);}),1);
+        if(editing) { Button add = button("＋ 添加自定义",()->editCandidate(combo,null)); root.addView(add,new LinearLayout.LayoutParams(-1,dp(46))); }
     }
     private void settings() {
         panel(false); toolbar("设置",null,null);

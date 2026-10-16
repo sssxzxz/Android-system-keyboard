@@ -26,7 +26,7 @@ final class ModelMatcher {
         if (prefix.isEmpty()) return result;
         String query = prefix.toLowerCase(Locale.ROOT);
         for (String model : models) {
-            if (model.toLowerCase(Locale.ROOT).startsWith(query)) result.add(model);
+            if (model.toLowerCase(Locale.ROOT).contains(query)) result.add(model);
             if (result.size() == 30) break;
         }
         return result;

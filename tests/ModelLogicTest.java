@@ -24,8 +24,10 @@ public class ModelLogicTest {
         equal("",ModelMatcher.prefix("13 ")); equal("ZP-1",ModelMatcher.prefix("ZP-1"));
         equal("",ModelMatcher.prefix(String.join("",Collections.nCopies(256,"1"))));
         equal(2,ModelMatcher.suffixLength("01 other")); equal(-1,ModelMatcher.suffixLength(null));
-        List<String> models=Arrays.asList("1301","1302","0130","zp-1","ZP-2");
-        equal(Arrays.asList("1301","1302"),ModelMatcher.match(models,"13"));
+        List<String> models=Arrays.asList("1301","1302","0130","413","c-1357","zp-1","ZP-2");
+        equal(Arrays.asList("1301","1302","0130","413","c-1357"),ModelMatcher.match(models,"13"));
+        equal(Arrays.asList("c-1357"),ModelMatcher.match(models,"-135"));
+        equal(Collections.emptyList(),ModelMatcher.match(models,"31"));
         equal(Arrays.asList("zp-1","ZP-2"),ModelMatcher.match(models,"Zp"));
         equal(Collections.emptyList(),ModelMatcher.match(models,""));
         equal(Collections.emptyList(),ModelMatcher.match(models,"999"));

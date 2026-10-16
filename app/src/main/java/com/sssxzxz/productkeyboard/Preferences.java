@@ -58,6 +58,17 @@ final class Preferences {
     void scale(float scale) { data.edit().putFloat("scale", Math.max(.65f, Math.min(1f, scale))).apply(); }
     boolean vibration() { return data.getBoolean("vibration", false); }
     void vibration(boolean value) { data.edit().putBoolean("vibration", value).apply(); }
+    boolean modelSuggestions() { return data.getBoolean("modelSuggestions", true); }
+    void modelSuggestions(boolean value) { data.edit().putBoolean("modelSuggestions", value).apply(); }
+    List<String> models() {
+        List<String> values = new ArrayList<>();
+        try {
+            org.json.JSONArray array = new org.json.JSONArray(data.getString("models", "[]"));
+            for (int i = 0; i < array.length(); i++) values.add(array.getString(i));
+        } catch (org.json.JSONException ignored) { }
+        return values;
+    }
+    void models(List<String> values) { data.edit().putString("models", new org.json.JSONArray(values).toString()).apply(); }
     void resetCandidates() { data.edit().remove("custom1.items").remove("custom2.items").remove("combos").remove("letters").remove("combo").remove("letter").apply(); }
     static List<String> defaultOrder() { return new ArrayList<>(Arrays.asList("clear", "combo", "letter", "minus", "delete")); }
     List<String> functionOrder() {

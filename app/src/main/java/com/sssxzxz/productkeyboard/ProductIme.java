@@ -14,6 +14,10 @@ public class ProductIme extends InputMethodService {
     private LinearLayout root;
     private FrameLayout host;
     private float unit = 1f;
+    private HorizontalScrollView modelBar;
+    private LinearLayout modelItems;
+    private List<String> modelCatalog = Collections.emptyList();
+    private boolean privateEditor;
 
 
     private List<String> layoutDraft;
@@ -31,10 +35,30 @@ public class ProductIme extends InputMethodService {
         });
         showKeyboard(); return host;
     }
-    @Override public void onStartInputView(EditorInfo info, boolean restarting) { super.onStartInputView(info, restarting); if (host != null) showKeyboard(); }
+    @Override public void onStartInputView(EditorInfo info, boolean restarting) {
+        super.onStartInputView(info, restarting);
+        int variation = info.inputType & android.text.InputType.TYPE_MASK_VARIATION;
+        int type = info.inputType & android.text.InputType.TYPE_MASK_CLASS;
+        privateEditor = (type == android.text.InputType.TYPE_CLASS_TEXT &&
+                (variation == android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+                 variation == android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
+                 variation == android.text.InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD)) ||
+                (type == android.text.InputType.TYPE_CLASS_NUMBER && variation == android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        if (prefs != null) modelCatalog = prefs.models();
+        if (host != null) showKeyboard();
+    }
+    @Override public void onUpdateSelection(int oldStart, int oldEnd, int newStart, int newEnd, int candidatesStart, int candidatesEnd) {
+        super.onUpdateSelection(oldStart, oldEnd, newStart, newEnd, candidatesStart, candidatesEnd);
+        refreshModels();
+    }
+    @Override public void onFinishInputView(boolean finishingInput) {
+        modelBar = null; modelItems = null;
+        super.onFinishInputView(finishingInput);
+    }
     private int dp(float value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private LinearLayout column() { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); return l; }
     private void panel(boolean keyboard) {
+        modelBar = null; modelItems = null;
         host.removeAllViews(); root = column();
         float screenWidth = getResources().getDisplayMetrics().widthPixels / getResources().getDisplayMetrics().density;
         float screenHeight = getResources().getDisplayMetrics().heightPixels / getResources().getDisplayMetrics().density;
@@ -59,7 +83,48 @@ public class ProductIme extends InputMethodService {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(vertical ? -1 : 0, vertical ? 0 : -1, weight);
         lp.setMargins(dp(2*unit),dp(2*unit),dp(2*unit),dp(2*unit)); parent.addView(child, lp);
     }
-    private void commit(String value) { InputConnection ic = getCurrentInputConnection(); if(ic != null) ic.commitText(value, 1); }
+    private void commit(String value) { InputConnection ic = getCurrentInputConnection(); if(ic != null) ic.commitText(value, 1); refreshModels(); }
+    private void refreshModels() {
+        if (modelBar == null) return;
+        modelItems.removeAllViews();
+        InputConnection ic = getCurrentInputConnection();
+        List<String> matches = Collections.emptyList();
+        if (prefs.modelSuggestions() && !privateEditor && ic != null) {
+            CharSequence selected = ic.getSelectedText(0);
+            if (selected == null || selected.length() == 0) {
+                String prefix = ModelMatcher.prefix(ic.getTextBeforeCursor(ModelMatcher.CONTEXT_LIMIT, 0));
+                matches = ModelMatcher.match(modelCatalog, prefix);
+            }
+        }
+        for (String model : matches) {
+            Button choice = button(model, () -> completeModel(model));
+            choice.setTextSize(18); choice.setPadding(dp(12),0,dp(12),0);
+            choice.setContentDescription("输入型号 " + model);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2,-1);
+            lp.setMargins(dp(2),dp(2),dp(2),dp(2)); modelItems.addView(choice,lp);
+        }
+        boolean visible = !matches.isEmpty();
+        modelBar.setVisibility(visible ? View.VISIBLE : View.GONE);
+        modelBar.scrollTo(0,0);
+        android.view.ViewGroup.LayoutParams lp = root.getLayoutParams();
+        lp.height = dp(288 * unit) + (visible ? dp(48) : 0);
+        root.setLayoutParams(lp);
+    }
+    private void completeModel(String model) {
+        InputConnection ic = getCurrentInputConnection();
+        if (ic == null) return;
+        CharSequence selected = ic.getSelectedText(0);
+        if (selected != null && selected.length() != 0) { refreshModels(); return; }
+        String prefix = ModelMatcher.prefix(ic.getTextBeforeCursor(ModelMatcher.CONTEXT_LIMIT,0));
+        int suffix = ModelMatcher.suffixLength(ic.getTextAfterCursor(ModelMatcher.CONTEXT_LIMIT,0));
+        if (suffix < 0 || !ModelMatcher.match(modelCatalog,prefix).contains(model)) { refreshModels(); return; }
+        ic.beginBatchEdit();
+        try {
+            ic.finishComposingText();
+            if (ic.deleteSurroundingText(prefix.length(),suffix)) ic.commitText(model,1);
+        } finally { ic.endBatchEdit(); }
+        refreshModels();
+    }
     static boolean search(InputConnection ic) {
         if (ic == null) return false;
         ic.finishComposingText();
@@ -78,16 +143,23 @@ public class ProductIme extends InputMethodService {
             if (ic.performContextMenuAction(android.R.id.selectAll)) ic.commitText("", 1);
             else Toast.makeText(this,"此输入框不支持全清，请在应用内选择全部后删除",Toast.LENGTH_SHORT).show();
         } finally { ic.endBatchEdit(); }
+        refreshModels();
     }
     private void backspace() {
         InputConnection ic = getCurrentInputConnection(); if (ic == null) return;
         CharSequence selection = ic.getSelectedText(0);
         if (selection != null && selection.length() > 0) ic.commitText("",1);
         else ic.deleteSurroundingTextInCodePoints(1,0);
+        refreshModels();
     }
     private void longPress(Button button, Runnable action) { button.setOnLongClickListener(v -> { feedback(v); action.run(); return true; }); }
     private void showKeyboard() {
-        panel(true); LinearLayout row = new LinearLayout(this); root.addView(row,new LinearLayout.LayoutParams(-1,-1));
+        panel(true);
+        modelCatalog = prefs.models();
+        modelBar = new HorizontalScrollView(this); modelBar.setHorizontalScrollBarEnabled(false);
+        modelItems = new LinearLayout(this); modelBar.addView(modelItems,new HorizontalScrollView.LayoutParams(-2,-1));
+        root.addView(modelBar,new LinearLayout.LayoutParams(-1,dp(48)));
+        LinearLayout row = new LinearLayout(this); root.addView(row,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout functions = column();
         for (String key : prefs.functionOrder()) add(functions, functionButton(key), 1);
         LinearLayout right = column();
@@ -97,6 +169,7 @@ public class ProductIme extends InputMethodService {
         for(int r=0;r<3;r++) { LinearLayout numbers = new LinearLayout(this); add(right,numbers,1); for(int c=1;c<=3;c++) { String value = Integer.toString(r*3+c); add(numbers,button(value,()->commit(value)),1); } }
         LinearLayout bottom = new LinearLayout(this); add(right,bottom,1); add(bottom,button("0",()->commit("0")),2);
         Button search = button("搜索", this::search); search.setTextColor(Color.rgb(120,221,208)); add(bottom,search,1);
+        refreshModels();
     }
     private String functionName(String key) {
         switch (key) {
@@ -209,6 +282,14 @@ public class ProductIme extends InputMethodService {
         panel(false); toolbar("设置",null,null);
         ScrollView scroll = new ScrollView(this); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout options = column(); scroll.addView(options);
+        Switch suggestions = new Switch(this); suggestions.setText("输入后显示型号候选");
+        suggestions.setTextColor(Color.rgb(235,241,247)); suggestions.setChecked(prefs.modelSuggestions());
+        suggestions.setOnCheckedChangeListener((b,checked) -> prefs.modelSuggestions(checked));
+        options.addView(suggestions,new LinearLayout.LayoutParams(-1,dp(48)));
+        Button models = button("导入型号（已保存 " + prefs.models().size() + " 个）", () -> {
+            android.content.Intent intent = new android.content.Intent(this, ModelImportActivity.class);
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(intent);
+        }); models.setTextSize(17); options.addView(models,new LinearLayout.LayoutParams(-1,dp(48)));
         Button layout = button("按键布局",this::openLayoutEditor); options.addView(layout,new LinearLayout.LayoutParams(-1,dp(48)));
         Button resize=button("上下拖动此处调整大小 · "+Math.round(prefs.scale()*100)+"%",()->{});
         final float[] initial=new float[2];

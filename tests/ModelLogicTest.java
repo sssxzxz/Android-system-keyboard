@@ -20,6 +20,16 @@ public class ModelLogicTest {
         return bytes.toByteArray();
     }
     public static void main(String[] args) throws Exception {
+        CandidateVisibility visibility = new CandidateVisibility();
+        equal(false,visibility.dismissed());
+        visibility.dismiss("c-1357");
+        visibility.observe("c-1357"); equal(true,visibility.dismissed());
+        visibility.beginEditor("c-1357"); visibility.observe("c-1357"); equal(true,visibility.dismissed());
+        visibility.observe("c-135"); equal(false,visibility.dismissed());
+        visibility.dismiss("413"); visibility.edited(); equal(false,visibility.dismissed());
+        visibility.dismiss(null); visibility.observe(null); equal(true,visibility.dismissed());
+        visibility.observe("413"); equal(true,visibility.dismissed());
+        visibility.observe("1301"); equal(false,visibility.dismissed());
         equal("", ModelMatcher.prefix(null)); equal("13",ModelMatcher.prefix("other\n13"));
         equal("",ModelMatcher.prefix("13 ")); equal("ZP-1",ModelMatcher.prefix("ZP-1"));
         equal("",ModelMatcher.prefix(String.join("",Collections.nCopies(256,"1"))));

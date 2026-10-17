@@ -18,6 +18,9 @@ public class ProductIme extends InputMethodService {
     private LinearLayout modelItems;
     private List<String> modelCatalog = Collections.emptyList();
     private boolean privateEditor;
+    private final CandidateVisibility candidateVisibility = new CandidateVisibility();
+    private boolean completingModel;
+    private int extractionToken;
 
 
     private List<String> layoutDraft;
@@ -45,7 +48,25 @@ public class ProductIme extends InputMethodService {
                  variation == android.text.InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD)) ||
                 (type == android.text.InputType.TYPE_CLASS_NUMBER && variation == android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD);
         if (prefs != null) modelCatalog = prefs.models();
+        candidateVisibility.beginEditor(editorText(true));
         if (host != null) showKeyboard();
+    }
+    private String editorText(boolean monitor) {
+        InputConnection ic = getCurrentInputConnection();
+        if (ic == null || privateEditor) return null;
+        ExtractedTextRequest request = new ExtractedTextRequest();
+        if (monitor) extractionToken++;
+        request.token = extractionToken;
+        request.hintMaxChars = 8192;
+        request.hintMaxLines = 100;
+        ExtractedText text = ic.getExtractedText(request, monitor ? InputConnection.GET_EXTRACTED_TEXT_MONITOR : 0);
+        // Only compare full snapshots, never cursor-relative or partial windows.
+        if (text == null || text.text == null || text.startOffset != 0 || text.partialStartOffset >= 0) return null;
+        return text.text.toString();
+    }
+    @Override public void onUpdateExtractedText(int token, ExtractedText text) {
+        super.onUpdateExtractedText(token, text);
+        if (token == extractionToken) refreshModels();
     }
     @Override public void onUpdateSelection(int oldStart, int oldEnd, int newStart, int newEnd, int candidatesStart, int candidatesEnd) {
         super.onUpdateSelection(oldStart, oldEnd, newStart, newEnd, candidatesStart, candidatesEnd);
@@ -83,13 +104,18 @@ public class ProductIme extends InputMethodService {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(vertical ? -1 : 0, vertical ? 0 : -1, weight);
         lp.setMargins(dp(2*unit),dp(2*unit),dp(2*unit),dp(2*unit)); parent.addView(child, lp);
     }
-    private void commit(String value) { InputConnection ic = getCurrentInputConnection(); if(ic != null) ic.commitText(value, 1); refreshModels(); }
+    private void commit(String value) {
+        InputConnection ic = getCurrentInputConnection();
+        if (ic != null && ic.commitText(value,1)) candidateVisibility.edited();
+        refreshModels();
+    }
     private void refreshModels() {
-        if (modelBar == null) return;
+        if (modelBar == null || completingModel) return;
+        if (candidateVisibility.dismissed()) candidateVisibility.observe(editorText(false));
         modelItems.removeAllViews();
         InputConnection ic = getCurrentInputConnection();
         List<String> matches = Collections.emptyList();
-        if (prefs.modelSuggestions() && !privateEditor && ic != null) {
+        if (prefs.modelSuggestions() && !candidateVisibility.dismissed() && !privateEditor && ic != null) {
             CharSequence selected = ic.getSelectedText(0);
             if (selected == null || selected.length() == 0) {
                 String prefix = ModelMatcher.prefix(ic.getTextBeforeCursor(ModelMatcher.CONTEXT_LIMIT, 0));
@@ -118,11 +144,14 @@ public class ProductIme extends InputMethodService {
         String prefix = ModelMatcher.prefix(ic.getTextBeforeCursor(ModelMatcher.CONTEXT_LIMIT,0));
         int suffix = ModelMatcher.suffixLength(ic.getTextAfterCursor(ModelMatcher.CONTEXT_LIMIT,0));
         if (suffix < 0 || !ModelMatcher.match(modelCatalog,prefix).contains(model)) { refreshModels(); return; }
+        completingModel = true;
         ic.beginBatchEdit();
         try {
             ic.finishComposingText();
-            if (ic.deleteSurroundingText(prefix.length(),suffix)) ic.commitText(model,1);
-        } finally { ic.endBatchEdit(); }
+            if (ic.deleteSurroundingText(prefix.length(),suffix) && ic.commitText(model,1)) {
+                candidateVisibility.dismiss(editorText(false));
+            }
+        } finally { ic.endBatchEdit(); completingModel = false; }
         refreshModels();
     }
     static boolean search(InputConnection ic) {
@@ -140,7 +169,9 @@ public class ProductIme extends InputMethodService {
         try {
             ic.finishComposingText();
             // Never use cut: it would write the user's text to the clipboard.
-            if (ic.performContextMenuAction(android.R.id.selectAll)) ic.commitText("", 1);
+            if (ic.performContextMenuAction(android.R.id.selectAll)) {
+                if (ic.commitText("", 1)) candidateVisibility.edited();
+            }
             else Toast.makeText(this,"此输入框不支持全清，请在应用内选择全部后删除",Toast.LENGTH_SHORT).show();
         } finally { ic.endBatchEdit(); }
         refreshModels();
@@ -148,8 +179,8 @@ public class ProductIme extends InputMethodService {
     private void backspace() {
         InputConnection ic = getCurrentInputConnection(); if (ic == null) return;
         CharSequence selection = ic.getSelectedText(0);
-        if (selection != null && selection.length() > 0) ic.commitText("",1);
-        else ic.deleteSurroundingTextInCodePoints(1,0);
+        boolean changed = selection != null && selection.length() > 0 ? ic.commitText("",1) : ic.deleteSurroundingTextInCodePoints(1,0);
+        if (changed) candidateVisibility.edited();
         refreshModels();
     }
     private void longPress(Button button, Runnable action) { button.setOnLongClickListener(v -> { feedback(v); action.run(); return true; }); }

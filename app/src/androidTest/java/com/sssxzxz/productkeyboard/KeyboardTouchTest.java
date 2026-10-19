@@ -37,6 +37,20 @@ public class KeyboardTouchTest extends InstrumentationTestCase {
             }
         });
     }
+    public void testDigitDownSurvivesDriftAndCancelWithoutDuplicates() {
+        getInstrumentation().runOnMainSync(() -> {
+            int[] clicks = {0}; KeyboardButton button = key(() -> clicks[0]++);
+            button.setCommitOnDown(true);
+            event(button,MotionEvent.ACTION_DOWN,50,50);
+            assertEquals(1,clicks[0]);
+            event(button,MotionEvent.ACTION_MOVE,110,50);
+            event(button,MotionEvent.ACTION_UP,110,50);
+            assertEquals(1,clicks[0]); assertFalse(button.isPressed());
+            event(button,MotionEvent.ACTION_DOWN,50,50);
+            event(button,MotionEvent.ACTION_CANCEL,50,50);
+            assertEquals(2,clicks[0]); assertFalse(button.isPressed());
+        });
+    }
     public void testCancelAndMoveOutsideDoNotInputOrLeaveHighlight() {
         getInstrumentation().runOnMainSync(() -> {
             int[] clicks = {0}; KeyboardButton button = key(() -> clicks[0]++);

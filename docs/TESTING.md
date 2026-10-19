@@ -1,5 +1,13 @@
 # 测试记录
 
+## 0.1.8 数字按下提交（2026-10-19）
+
+- 新增 `InputMethodBurstTest`：通过 UiAutomation 向实际系统输入法窗口注入触摸，以启用页 EditText 的最终文本为断言；开启型号候选，连续输入 20 组 `089`，每次 `8` 都在按下后滑出键帽再松手。
+- 旧版 0.1.7 对照测试失败，实际文本漏掉 `8`；相同测试在 0.1.8 通过，全部 60 个字符完整。测试等待窗口焦点后才唤起键盘，首次测试的键盘未显示问题已修正。
+- 完整仪器测试 **14 项通过**，含旧有配置回归、快速按键、长按、取消及新增数字按下立即提交/滑出或取消不重复提交。
+- 构建命令 `assembleDebug assembleDebugAndroidTest lintDebug --offline` 成功。测试只使用专用模拟器，需预先 `adb shell ime enable com.sssxzxz.productkeyboard/.ProductIme` 及 `adb shell ime set com.sssxzxz.productkeyboard/.ProductIme`；不能在用户日用设备运行。
+- 输入框端到端测试证明了边缘滑动这一路径的修复，不等同于已复现用户手机的全部丢字原因。Google 表格和不同手机仍需验收。
+
 ## 0.1.7 快速连点（2026-10-19）
 
 - Gradle `assembleDebug assembleDebugAndroidTest lintDebug --offline` 成功，Lint 0 错误、9 警告；APK 签名校验通过，Android 15 专用模拟器安装成功。

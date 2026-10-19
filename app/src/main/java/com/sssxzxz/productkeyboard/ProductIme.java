@@ -18,6 +18,7 @@ public class ProductIme extends InputMethodService {
     private LinearLayout modelItems;
     private List<String> modelCatalog = Collections.emptyList();
     private boolean privateEditor;
+    private boolean keyboardTouching;
     private final CandidateVisibility candidateVisibility = new CandidateVisibility();
     private boolean completingModel;
     private int extractionToken;
@@ -31,7 +32,16 @@ public class ProductIme extends InputMethodService {
     @Override public boolean onEvaluateFullscreenMode() { return false; }
     @Override public View onCreateInputView() {
         prefs = new Preferences(this);
-        host = new FrameLayout(this); host.setBackgroundColor(Color.rgb(18,23,30));
+        host = new FrameLayout(this) {
+            @Override public boolean dispatchTouchEvent(MotionEvent event) {
+                int action = event.getActionMasked();
+                if (action == MotionEvent.ACTION_DOWN) keyboardTouching = true;
+                try { return super.dispatchTouchEvent(event); }
+                finally {
+                    if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) keyboardTouching = false;
+                }
+            }
+        }; host.setBackgroundColor(Color.rgb(18,23,30));
         getWindow().getWindow().setNavigationBarColor(Color.rgb(18,23,30));
         getWindow().getWindow().getDecorView().setSystemUiVisibility(0);
         host.setPadding(0, 0, 0, dp(24));
@@ -79,6 +89,7 @@ public class ProductIme extends InputMethodService {
         suggestionHandler.removeCallbacks(suggestionRefresh);
         displayedModels = Collections.emptyList();
         modelBar = null; modelItems = null;
+        keyboardTouching = false;
         super.onFinishInputView(finishingInput);
     }
     private int dp(float value) { return Math.round(value * getResources().getDisplayMetrics().density); }
@@ -98,6 +109,11 @@ public class ProductIme extends InputMethodService {
     }
     private Button button(String label, Runnable action) {
         return button(label, action, false);
+    }
+    private Button inputButton(String label, Runnable action) {
+        KeyboardButton b = (KeyboardButton) keyButton(label, action);
+        b.setCommitOnDown(true);
+        return b;
     }
     private Button keyButton(String label, Runnable action) {
         return button(label, action, true);
@@ -141,6 +157,7 @@ public class ProductIme extends InputMethodService {
     }
     private void refreshModelsNow() {
         if (modelBar == null || completingModel) return;
+        if (keyboardTouching) { refreshModels(); return; }
         if (prefs.modelSuggestions() && !modelCatalog.isEmpty() && candidateVisibility.dismissed()) candidateVisibility.observe(editorText(false));
 
         InputConnection ic = getCurrentInputConnection();
@@ -231,8 +248,8 @@ public class ProductIme extends InputMethodService {
         if (!prefs.functionsOnRight()) add(row,functions,1);
         add(row,right,3);
         if (prefs.functionsOnRight()) add(row,functions,1);
-        for(int r=0;r<3;r++) { LinearLayout numbers = new LinearLayout(this); add(right,numbers,1); for(int c=1;c<=3;c++) { String value = Integer.toString(r*3+c); add(numbers,keyButton(value,()->commit(value)),1); } }
-        LinearLayout bottom = new LinearLayout(this); add(right,bottom,1); add(bottom,keyButton("0",()->commit("0")),2);
+        for(int r=0;r<3;r++) { LinearLayout numbers = new LinearLayout(this); add(right,numbers,1); for(int c=1;c<=3;c++) { String value = Integer.toString(r*3+c); add(numbers,inputButton(value,()->commit(value)),1); } }
+        LinearLayout bottom = new LinearLayout(this); add(right,bottom,1); add(bottom,inputButton("0",()->commit("0")),2);
         Button search = keyButton("搜索", this::search); search.setTextColor(Color.rgb(120,221,208)); add(bottom,search,1);
         refreshModels();
     }
@@ -251,7 +268,7 @@ public class ProductIme extends InputMethodService {
             case "clear": b = keyButton("全清", () -> clear(getCurrentInputConnection())); longPress(b,this::settings); return b;
             case "combo": return customButton(true);
             case "letter": return customButton(false);
-            case "minus": return keyButton("−", () -> commit("-"));
+            case "minus": return inputButton("−", () -> commit("-"));
             default: return keyButton("退格", this::backspace);
         }
     }

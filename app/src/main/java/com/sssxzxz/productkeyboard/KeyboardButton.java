@@ -12,6 +12,8 @@ final class KeyboardButton extends Button {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean tracking;
     private boolean held;
+    private boolean commitOnDown;
+    void setCommitOnDown(boolean enabled) { commitOnDown = enabled; }
     private final Runnable longPress = () -> {
         if (tracking && isPressed() && isLongClickable()) held = performLongClick();
     };
@@ -26,13 +28,22 @@ final class KeyboardButton extends Button {
                 tracking = true;
                 held = false;
                 setPressed(true);
-                if (isLongClickable()) handler.postDelayed(longPress, ViewConfiguration.getLongPressTimeout());
+                if (commitOnDown) performClick();
+                else if (isLongClickable()) handler.postDelayed(longPress, ViewConfiguration.getLongPressTimeout());
+                return true;
+            case MotionEvent.ACTION_POINTER_DOWN:
+                int index = event.getActionIndex();
+                if (commitOnDown && event.getX(index) >= 0 && event.getY(index) >= 0
+                        && event.getX(index) < getWidth() && event.getY(index) < getHeight()) {
+                    setPressed(true);
+                    performClick();
+                }
                 return true;
             case MotionEvent.ACTION_MOVE:
                 if (event.getX() < 0 || event.getY() < 0 || event.getX() >= getWidth() || event.getY() >= getHeight()) cancelTouch();
                 return true;
             case MotionEvent.ACTION_UP:
-                boolean click = tracking && !held && event.getX() >= 0 && event.getY() >= 0
+                boolean click = !commitOnDown && tracking && !held && event.getX() >= 0 && event.getY() >= 0
                         && event.getX() < getWidth() && event.getY() < getHeight();
                 cancelTouch();
                 if (click) performClick();

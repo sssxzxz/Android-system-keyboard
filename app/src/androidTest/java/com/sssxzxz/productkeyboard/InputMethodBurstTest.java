@@ -61,7 +61,10 @@ public class InputMethodBurstTest extends InstrumentationTestCase {
     public void test089ReachesRealEditorWhenEightDriftsOutside() {
         Preferences prefs = new Preferences(getInstrumentation().getTargetContext());
         java.util.List<String> oldModels = prefs.models(); boolean oldEnabled = prefs.modelSuggestions();
-        prefs.models(Arrays.asList("089","0891121","800")); prefs.modelSuggestions(true);
+        java.util.List<String> catalog = new java.util.ArrayList<>();
+        for (int i=0;i<19998;i++) catalog.add("MODEL-"+i);
+        catalog.add("089"); catalog.add("0891121");
+        prefs.models(catalog); prefs.modelSuggestions(true);
         AccessibilityServiceInfo info = getInstrumentation().getUiAutomation().getServiceInfo();
         info.flags |= AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
         getInstrumentation().getUiAutomation().setServiceInfo(info);
@@ -77,9 +80,13 @@ public class InputMethodBurstTest extends InstrumentationTestCase {
                 ((InputMethodManager)activity.getSystemService(Activity.INPUT_METHOD_SERVICE)).showSoftInput(editor,0);
             });
             Rect zero = keyBounds("0"), eight = keyBounds("8"), nine = keyBounds("9");
+            Rect one = keyBounds("1"), two = keyBounds("2");
             StringBuilder expected = new StringBuilder();
             for (int i=0;i<20;i++) {
-                tap(zero,false); tap(eight,true); tap(nine,false); expected.append("089");
+                tap(zero,false);
+                if (i == 0) keyBounds("MODEL-0"); // Background matching must still render after input settles.
+                tap(eight,true); tap(nine,false);
+                tap(one,false); tap(one,false); tap(two,false); tap(one,false); expected.append("0891121");
             }
             long deadline = SystemClock.uptimeMillis()+3000;
             String[] actual = {""};

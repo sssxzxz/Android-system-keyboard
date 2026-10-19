@@ -24,6 +24,7 @@ public class ProductIme extends InputMethodService {
     private int extractionToken;
     private final android.os.Handler suggestionHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private final Runnable suggestionRefresh = this::refreshModelsNow;
+    private SuggestionQuery suggestionQuery;
     private List<String> displayedModels = Collections.emptyList();
 
 
@@ -87,6 +88,7 @@ public class ProductIme extends InputMethodService {
     }
     @Override public void onFinishInputView(boolean finishingInput) {
         suggestionHandler.removeCallbacks(suggestionRefresh);
+        if (suggestionQuery != null) suggestionQuery.invalidate();
         displayedModels = Collections.emptyList();
         modelBar = null; modelItems = null;
         keyboardTouching = false;
@@ -96,6 +98,7 @@ public class ProductIme extends InputMethodService {
     private LinearLayout column() { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); return l; }
     private void panel(boolean keyboard) {
         suggestionHandler.removeCallbacks(suggestionRefresh);
+        if (suggestionQuery != null) suggestionQuery.invalidate();
         displayedModels = Collections.emptyList();
         modelBar = null; modelItems = null;
         host.removeAllViews(); root = column();
@@ -149,26 +152,32 @@ public class ProductIme extends InputMethodService {
     }
     private void refreshModels() {
         suggestionHandler.removeCallbacks(suggestionRefresh);
+        if (suggestionQuery != null) suggestionQuery.invalidate();
         if (modelBar != null) suggestionHandler.postDelayed(suggestionRefresh, 80);
     }
     @Override public void onDestroy() {
         suggestionHandler.removeCallbacks(suggestionRefresh);
+        if (suggestionQuery != null) suggestionQuery.invalidate();
+        if (suggestionQuery != null) suggestionQuery.close();
         super.onDestroy();
     }
     private void refreshModelsNow() {
         if (modelBar == null || completingModel) return;
         if (keyboardTouching) { refreshModels(); return; }
-        if (prefs.modelSuggestions() && !modelCatalog.isEmpty() && candidateVisibility.dismissed()) candidateVisibility.observe(editorText(false));
-
         InputConnection ic = getCurrentInputConnection();
-        List<String> matches = Collections.emptyList();
-        if (prefs.modelSuggestions() && !modelCatalog.isEmpty() && !candidateVisibility.dismissed() && !privateEditor && ic != null) {
-            CharSequence selected = ic.getSelectedText(0);
-            if (selected == null || selected.length() == 0) {
-                String prefix = ModelMatcher.prefix(ic.getTextBeforeCursor(ModelMatcher.CONTEXT_LIMIT, 0));
-                matches = ModelMatcher.match(modelCatalog, prefix);
-            }
+        if (!prefs.modelSuggestions() || modelCatalog.isEmpty() || privateEditor || ic == null) {
+            renderModels(Collections.emptyList());
+            return;
         }
+        if (suggestionQuery == null) suggestionQuery = new SuggestionQuery();
+        suggestionQuery.request(ic, modelCatalog, candidateVisibility.dismissed(), (matches, snapshot) -> {
+            if (modelBar == null) return;
+            if (keyboardTouching) { refreshModels(); return; }
+            if (candidateVisibility.dismissed()) candidateVisibility.observe(snapshot);
+            renderModels(candidateVisibility.dismissed() ? Collections.emptyList() : matches);
+        });
+    }
+    private void renderModels(List<String> matches) {
         if (displayedModels.equals(matches)) return;
         displayedModels = new ArrayList<>(matches);
         modelItems.removeAllViews();
@@ -203,7 +212,9 @@ public class ProductIme extends InputMethodService {
             }
         } finally { ic.endBatchEdit(); completingModel = false; }
         suggestionHandler.removeCallbacks(suggestionRefresh);
-        refreshModelsNow();
+        if (suggestionQuery != null) suggestionQuery.invalidate();
+        if (candidateVisibility.dismissed()) renderModels(Collections.emptyList());
+        else refreshModels();
     }
     static boolean search(InputConnection ic) {
         if (ic == null) return false;

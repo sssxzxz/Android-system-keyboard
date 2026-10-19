@@ -21,6 +21,9 @@ public class ProductIme extends InputMethodService {
     private final CandidateVisibility candidateVisibility = new CandidateVisibility();
     private boolean completingModel;
     private int extractionToken;
+    private final android.os.Handler suggestionHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable suggestionRefresh = this::refreshModelsNow;
+    private List<String> displayedModels = Collections.emptyList();
 
 
     private List<String> layoutDraft;
@@ -73,12 +76,16 @@ public class ProductIme extends InputMethodService {
         refreshModels();
     }
     @Override public void onFinishInputView(boolean finishingInput) {
+        suggestionHandler.removeCallbacks(suggestionRefresh);
+        displayedModels = Collections.emptyList();
         modelBar = null; modelItems = null;
         super.onFinishInputView(finishingInput);
     }
     private int dp(float value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private LinearLayout column() { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); return l; }
     private void panel(boolean keyboard) {
+        suggestionHandler.removeCallbacks(suggestionRefresh);
+        displayedModels = Collections.emptyList();
         modelBar = null; modelItems = null;
         host.removeAllViews(); root = column();
         float screenWidth = getResources().getDisplayMetrics().widthPixels / getResources().getDisplayMetrics().density;
@@ -90,11 +97,26 @@ public class ProductIme extends InputMethodService {
         host.addView(root, lp);
     }
     private Button button(String label, Runnable action) {
-        Button b = new Button(this); b.setText(label); b.setAllCaps(false); b.setTextSize(Math.max(12, (label.contains("\n") ? 16 : 21)*unit));
+        return button(label, action, false);
+    }
+    private Button keyButton(String label, Runnable action) {
+        return button(label, action, true);
+    }
+    private Button button(String label, Runnable action, boolean keyboardKey) {
+        Button b = keyboardKey ? new KeyboardButton(this) : new Button(this); b.setText(label); b.setAllCaps(false); b.setTextSize(Math.max(12, (label.contains("\n") ? 16 : 21)*unit));
         b.setIncludeFontPadding(false);
         b.setTextColor(Color.rgb(235,241,247)); b.setPadding(0,0,0,0); b.setMinHeight(0); b.setMinimumHeight(0); b.setMinWidth(0); b.setMinimumWidth(0);
         GradientDrawable bg = new GradientDrawable(); bg.setColor(Color.rgb(39,49,62)); bg.setCornerRadius(dp(8*unit));
-        b.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x5578DDD0), bg, null));
+        if (keyboardKey) {
+            GradientDrawable pressed = new GradientDrawable(); pressed.setColor(Color.rgb(65,100,108)); pressed.setCornerRadius(dp(8*unit));
+            android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
+            states.addState(new int[]{android.R.attr.state_pressed}, pressed);
+            states.addState(new int[]{}, bg);
+            b.setBackground(states);
+            b.setStateListAnimator(null);
+        } else {
+            b.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x5578DDD0), bg, null));
+        }
         b.setSoundEffectsEnabled(false);
         b.setOnClickListener(v -> { feedback(v); action.run(); }); return b;
     }
@@ -110,18 +132,29 @@ public class ProductIme extends InputMethodService {
         refreshModels();
     }
     private void refreshModels() {
+        suggestionHandler.removeCallbacks(suggestionRefresh);
+        if (modelBar != null) suggestionHandler.postDelayed(suggestionRefresh, 80);
+    }
+    @Override public void onDestroy() {
+        suggestionHandler.removeCallbacks(suggestionRefresh);
+        super.onDestroy();
+    }
+    private void refreshModelsNow() {
         if (modelBar == null || completingModel) return;
-        if (candidateVisibility.dismissed()) candidateVisibility.observe(editorText(false));
-        modelItems.removeAllViews();
+        if (prefs.modelSuggestions() && !modelCatalog.isEmpty() && candidateVisibility.dismissed()) candidateVisibility.observe(editorText(false));
+
         InputConnection ic = getCurrentInputConnection();
         List<String> matches = Collections.emptyList();
-        if (prefs.modelSuggestions() && !candidateVisibility.dismissed() && !privateEditor && ic != null) {
+        if (prefs.modelSuggestions() && !modelCatalog.isEmpty() && !candidateVisibility.dismissed() && !privateEditor && ic != null) {
             CharSequence selected = ic.getSelectedText(0);
             if (selected == null || selected.length() == 0) {
                 String prefix = ModelMatcher.prefix(ic.getTextBeforeCursor(ModelMatcher.CONTEXT_LIMIT, 0));
                 matches = ModelMatcher.match(modelCatalog, prefix);
             }
         }
+        if (displayedModels.equals(matches)) return;
+        displayedModels = new ArrayList<>(matches);
+        modelItems.removeAllViews();
         for (String model : matches) {
             Button choice = button(model, () -> completeModel(model));
             choice.setTextSize(18); choice.setPadding(dp(12),0,dp(12),0);
@@ -133,8 +166,8 @@ public class ProductIme extends InputMethodService {
         modelBar.setVisibility(visible ? View.VISIBLE : View.GONE);
         modelBar.scrollTo(0,0);
         android.view.ViewGroup.LayoutParams lp = root.getLayoutParams();
-        lp.height = dp(288 * unit) + (visible ? dp(48) : 0);
-        root.setLayoutParams(lp);
+        int height = dp(288 * unit) + (visible ? dp(48) : 0);
+        if (lp.height != height) { lp.height = height; root.setLayoutParams(lp); }
     }
     private void completeModel(String model) {
         InputConnection ic = getCurrentInputConnection();
@@ -152,7 +185,8 @@ public class ProductIme extends InputMethodService {
                 candidateVisibility.dismiss(editorText(false));
             }
         } finally { ic.endBatchEdit(); completingModel = false; }
-        refreshModels();
+        suggestionHandler.removeCallbacks(suggestionRefresh);
+        refreshModelsNow();
     }
     static boolean search(InputConnection ic) {
         if (ic == null) return false;
@@ -187,7 +221,7 @@ public class ProductIme extends InputMethodService {
     private void showKeyboard() {
         panel(true);
         modelCatalog = prefs.models();
-        modelBar = new HorizontalScrollView(this); modelBar.setHorizontalScrollBarEnabled(false);
+        modelBar = new HorizontalScrollView(this); modelBar.setHorizontalScrollBarEnabled(false); modelBar.setVisibility(View.GONE);
         modelItems = new LinearLayout(this); modelBar.addView(modelItems,new HorizontalScrollView.LayoutParams(-2,-1));
         root.addView(modelBar,new LinearLayout.LayoutParams(-1,dp(48)));
         LinearLayout row = new LinearLayout(this); root.addView(row,new LinearLayout.LayoutParams(-1,0,1));
@@ -197,9 +231,9 @@ public class ProductIme extends InputMethodService {
         if (!prefs.functionsOnRight()) add(row,functions,1);
         add(row,right,3);
         if (prefs.functionsOnRight()) add(row,functions,1);
-        for(int r=0;r<3;r++) { LinearLayout numbers = new LinearLayout(this); add(right,numbers,1); for(int c=1;c<=3;c++) { String value = Integer.toString(r*3+c); add(numbers,button(value,()->commit(value)),1); } }
-        LinearLayout bottom = new LinearLayout(this); add(right,bottom,1); add(bottom,button("0",()->commit("0")),2);
-        Button search = button("搜索", this::search); search.setTextColor(Color.rgb(120,221,208)); add(bottom,search,1);
+        for(int r=0;r<3;r++) { LinearLayout numbers = new LinearLayout(this); add(right,numbers,1); for(int c=1;c<=3;c++) { String value = Integer.toString(r*3+c); add(numbers,keyButton(value,()->commit(value)),1); } }
+        LinearLayout bottom = new LinearLayout(this); add(right,bottom,1); add(bottom,keyButton("0",()->commit("0")),2);
+        Button search = keyButton("搜索", this::search); search.setTextColor(Color.rgb(120,221,208)); add(bottom,search,1);
         refreshModels();
     }
     private String functionName(String key) {
@@ -214,15 +248,15 @@ public class ProductIme extends InputMethodService {
     private Button functionButton(String key) {
         Button b;
         switch (key) {
-            case "clear": b = button("全清", () -> clear(getCurrentInputConnection())); longPress(b,this::settings); return b;
+            case "clear": b = keyButton("全清", () -> clear(getCurrentInputConnection())); longPress(b,this::settings); return b;
             case "combo": return customButton(true);
             case "letter": return customButton(false);
-            case "minus": return button("−", () -> commit("-"));
-            default: return button("退格", this::backspace);
+            case "minus": return keyButton("−", () -> commit("-"));
+            default: return keyButton("退格", this::backspace);
         }
     }
     private Button customButton(boolean first) {
-        Button b = button(prefs.current(first), () -> commit(prefs.current(first)));
+        Button b = keyButton(prefs.current(first), () -> commit(prefs.current(first)));
         fitContent(b);
         b.setContentDescription(prefs.current(first) + "，长按选择或编辑自定义");
         longPress(b, () -> candidates(first,false));

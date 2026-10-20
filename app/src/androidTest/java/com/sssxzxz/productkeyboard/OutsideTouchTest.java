@@ -63,6 +63,7 @@ public class OutsideTouchTest extends InstrumentationTestCase {
                 outside[0].setOnClickListener(v -> clicks.incrementAndGet()); content.addView(outside[0]);
                 activity.setContentView(content);
             });
+            getInstrumentation().waitForIdleSync(); SystemClock.sleep(700);
             for(boolean enabled:new boolean[]{true,false,true}) {
                 getInstrumentation().runOnMainSync(() -> {
                     prefs.hideOnOutsideTouch(enabled);

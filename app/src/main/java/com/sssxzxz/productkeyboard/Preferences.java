@@ -56,6 +56,8 @@ final class Preferences {
     }
     float scale() { return Math.max(.65f, Math.min(1f, data.getFloat("scale", 1f))); }
     void scale(float scale) { data.edit().putFloat("scale", Math.max(.65f, Math.min(1f, scale))).apply(); }
+    boolean hideOnOutsideTouch() { return data.getBoolean("hideOnOutsideTouch", true); }
+    void hideOnOutsideTouch(boolean value) { data.edit().putBoolean("hideOnOutsideTouch", value).apply(); }
     boolean vibration() { return data.getBoolean("vibration", false); }
     void vibration(boolean value) { data.edit().putBoolean("vibration", value).apply(); }
     boolean modelSuggestions() { return data.getBoolean("modelSuggestions", true); }

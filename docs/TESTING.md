@@ -1,5 +1,13 @@
 # 测试记录
 
+## 0.1.10 键盘外触碰收起（2026-10-20）
+
+- `assembleDebug assembleDebugAndroidTest lintDebug --offline` 构建成功，Lint 0 错误、10 警告。新增开关默认开启，SharedPreferences 保存；恢复大小和候选不清除该设置。
+- 新增 `OutsideTouchTest`，通过真实屏幕坐标依次验证开启/关闭/重新开启、键盘内部数字输入、外部按钮仍收到点击、输入内容保留和偏好持久保存。
+- 本次模拟器启动异常缓慢，安装时 Android 系统服务尚未完成初始化，出现 PackageManagerInternal 空引用，应用及测试安装未成功。因此本版未完成运行验收，不将上述新增测试或既有测试标为通过。
+- 手机验收：长按全清进入设置，确认开关默认开启；触碰表格时收起且表格仍可操作；关闭后保持键盘显示；数字、自定义、候选及设置内部点击不收起；重开键盘和重启应用后设置保持。外部输入框可能由目标应用重新唤起键盘。
+- 外部触摸通过 FLAG_WATCH_OUTSIDE_TOUCH / ACTION_OUTSIDE 接收，仅有最初按下通知，不识别拖动，不记录外部坐标，不新增无障碍或悬浮窗权限。
+
 ## 0.1.9 后台候选查询（2026-10-19）
 
 - `assembleDebug assembleDebugAndroidTest lintDebug --offline` 成功；完整模拟器仪器测试 16 项通过。

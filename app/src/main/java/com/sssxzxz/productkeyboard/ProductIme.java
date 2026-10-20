@@ -45,6 +45,14 @@ public class ProductIme extends InputMethodService {
         }; host.setBackgroundColor(Color.rgb(18,23,30));
         getWindow().getWindow().setNavigationBarColor(Color.rgb(18,23,30));
         getWindow().getWindow().getDecorView().setSystemUiVisibility(0);
+        // Observe the system's outside-down notification without covering the host app.
+        getWindow().getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+        getWindow().getWindow().getDecorView().setOnTouchListener((view,event) -> {
+            if (event.getActionMasked() != MotionEvent.ACTION_OUTSIDE) return false;
+            if (prefs.hideOnOutsideTouch() && isInputViewShown()) requestHideSelf(0);
+            return true;
+        });
         host.setPadding(0, 0, 0, dp(24));
         host.setOnApplyWindowInsetsListener((view, insets) -> {
             view.setPadding(0, 0, 0, Math.max(dp(24), insets.getSystemWindowInsetBottom()));
@@ -375,6 +383,15 @@ public class ProductIme extends InputMethodService {
         panel(false); toolbar("设置",null,null);
         ScrollView scroll = new ScrollView(this); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout options = column(); scroll.addView(options);
+        Switch outside = new Switch(this); outside.setText("触碰键盘外区域时收起");
+        outside.setTextSize(16); outside.setTextColor(Color.rgb(235,241,247));
+        outside.setChecked(prefs.hideOnOutsideTouch());
+        outside.setOnCheckedChangeListener((button,checked) -> prefs.hideOnOutsideTouch(checked));
+        options.addView(outside,new LinearLayout.LayoutParams(-1,dp(56)));
+        TextView outsideHint = new TextView(this);
+        outsideHint.setText("默认开启。触碰上方表格或其他键盘外位置即收起，不必等拖动。");
+        outsideHint.setTextColor(Color.rgb(179,192,205)); outsideHint.setTextSize(12);
+        options.addView(outsideHint);
         Switch suggestions = new Switch(this); suggestions.setText("输入后显示型号候选");
         suggestions.setTextColor(Color.rgb(235,241,247)); suggestions.setChecked(prefs.modelSuggestions());
         suggestions.setOnCheckedChangeListener((b,checked) -> prefs.modelSuggestions(checked));

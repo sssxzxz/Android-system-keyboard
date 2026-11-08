@@ -79,6 +79,7 @@ public class InputMethodBurstTest extends InstrumentationTestCase {
                 editor.setText(""); editor.requestFocus();
                 ((InputMethodManager)activity.getSystemService(Activity.INPUT_METHOD_SERVICE)).showSoftInput(editor,0);
             });
+            keyBounds("0"); SystemClock.sleep(400);
             Rect zero = keyBounds("0"), eight = keyBounds("8"), nine = keyBounds("9");
             Rect one = keyBounds("1"), two = keyBounds("2");
             StringBuilder expected = new StringBuilder();

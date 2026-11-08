@@ -54,6 +54,17 @@ final class Preferences {
         values.set(index, replacement);
         save(first, values, selected.equals(original) ? replacement : selected);
     }
+    CustomLibrary customs() { return new CustomLibrary(data); }
+    List<String> gridLayout() {
+        String raw=data.getString("gridLayout.v1",null);
+        if(raw==null) return KeyLayout.defaults();
+        List<String> keys=new ArrayList<>(Arrays.asList(raw.split(",")));
+        return KeyLayout.valid(keys)?keys:KeyLayout.defaults();
+    }
+    void saveGridLayout(List<String> keys) {
+        if(!KeyLayout.valid(keys)) throw new IllegalArgumentException("Invalid grid");
+        data.edit().putString("gridLayout.v1",String.join(",",keys)).apply();
+    }
     float scale() { return Math.max(.65f, Math.min(1f, data.getFloat("scale", 1f))); }
     void scale(float scale) { data.edit().putFloat("scale", Math.max(.65f, Math.min(1f, scale))).apply(); }
     boolean hideOnOutsideTouch() { return data.getBoolean("hideOnOutsideTouch", true); }
@@ -71,7 +82,7 @@ final class Preferences {
         return values;
     }
     void models(List<String> values) { data.edit().putString("models", new org.json.JSONArray(values).toString()).apply(); }
-    void resetCandidates() { data.edit().remove("custom1.items").remove("custom2.items").remove("combos").remove("letters").remove("combo").remove("letter").apply(); }
+    void resetCandidates() { SharedPreferences.Editor edit=data.edit(); CustomLibrary.clear(edit); edit.remove("custom1.items").remove("custom2.items").remove("combos").remove("letters").remove("combo").remove("letter").apply(); }
     static List<String> defaultOrder() { return new ArrayList<>(Arrays.asList("clear", "combo", "letter", "minus", "delete")); }
     List<String> functionOrder() {
         List<String> order = new ArrayList<>(Arrays.asList(data.getString("functionOrder", String.join(",", defaultOrder())).split(",")));

@@ -29,7 +29,8 @@ public class ProductIme extends InputMethodService {
 
 
     private List<String> layoutDraft;
-    private boolean layoutRight;
+    private String selectedLayoutKey;
+    private int keyboardHeight;
     @Override public boolean onEvaluateFullscreenMode() { return false; }
     @Override public View onCreateInputView() {
         prefs = new Preferences(this);
@@ -114,7 +115,8 @@ public class ProductIme extends InputMethodService {
         float screenHeight = getResources().getDisplayMetrics().heightPixels / getResources().getDisplayMetrics().density;
         float base = Math.min(screenWidth, Math.min(480f, screenHeight * .72f));
         unit = base / 400f * prefs.scale();
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(base * prefs.scale()), keyboard ? dp(288 * unit) : dp(Math.min(330, screenHeight * .65f)), Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);
+        keyboardHeight = dp(Math.min(Math.max(250,360*unit),screenHeight*.62f));
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(base * prefs.scale()), keyboard ? keyboardHeight : dp(Math.min(330, screenHeight * .65f)), Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);
         root.setPadding(dp(4*unit), dp(4*unit), dp(4*unit), dp(4*unit));
         host.addView(root, lp);
     }
@@ -200,7 +202,7 @@ public class ProductIme extends InputMethodService {
         modelBar.setVisibility(visible ? View.VISIBLE : View.GONE);
         modelBar.scrollTo(0,0);
         android.view.ViewGroup.LayoutParams lp = root.getLayoutParams();
-        int height = dp(288 * unit) + (visible ? dp(48) : 0);
+        int height = keyboardHeight + (visible ? dp(48) : 0);
         if (lp.height != height) { lp.height = height; root.setLayoutParams(lp); }
     }
     private void completeModel(String model) {
@@ -259,125 +261,153 @@ public class ProductIme extends InputMethodService {
         modelCatalog = prefs.models();
         modelBar = new HorizontalScrollView(this); modelBar.setHorizontalScrollBarEnabled(false); modelBar.setVisibility(View.GONE);
         modelItems = new LinearLayout(this); modelBar.addView(modelItems,new HorizontalScrollView.LayoutParams(-2,-1));
-        root.addView(modelBar,new LinearLayout.LayoutParams(-1,dp(48)));
-        LinearLayout row = new LinearLayout(this); root.addView(row,new LinearLayout.LayoutParams(-1,0,1));
-        LinearLayout functions = column();
-        for (String key : prefs.functionOrder()) add(functions, functionButton(key), 1);
-        LinearLayout right = column();
-        if (!prefs.functionsOnRight()) add(row,functions,1);
-        add(row,right,3);
-        if (prefs.functionsOnRight()) add(row,functions,1);
-        for(int r=0;r<3;r++) { LinearLayout numbers = new LinearLayout(this); add(right,numbers,1); for(int c=1;c<=3;c++) { String value = Integer.toString(r*3+c); add(numbers,inputButton(value,()->commit(value)),1); } }
-        LinearLayout bottom = new LinearLayout(this); add(right,bottom,1); add(bottom,inputButton("0",()->commit("0")),2);
-        Button search = keyButton("搜索", this::search); search.setTextColor(Color.rgb(120,221,208)); add(bottom,search,1);
+        FrameLayout keyboardFrame = new FrameLayout(this);
+        root.addView(keyboardFrame,new LinearLayout.LayoutParams(-1,-1));
+        keyboardFrame.addView(modelBar,new FrameLayout.LayoutParams(-1,dp(48),Gravity.TOP));
+        KeyboardGrid grid = new KeyboardGrid(this);
+        keyboardFrame.addView(grid,new FrameLayout.LayoutParams(-1,keyboardHeight-root.getPaddingTop()-root.getPaddingBottom(),Gravity.BOTTOM));
+        List<String> keys=prefs.gridLayout();
+        for(int i=0;i<25;i++) if(!keys.get(i).equals("tail")) grid.put(functionButton(keys.get(i)),i,keys.get(i).equals("0")?2:1);
         refreshModels();
     }
     private String functionName(String key) {
-        switch (key) {
+        if(key.startsWith("custom")) return "自定义 " + (Integer.parseInt(key.substring(6))+1);
+        switch(key) {
             case "clear": return "全清";
-            case "combo": return "自定义 1";
-            case "letter": return "自定义 2";
             case "minus": return "减号";
-            default: return "退格";
+            case "delete": return "退格";
+            case "search": return "搜索";
+            default: return key;
         }
+    }
+    private String keyLabel(String key) {
+        if(key.startsWith("custom")) return prefs.customs().current(Integer.parseInt(key.substring(6)));
+        return key.equals("minus")?"−":functionName(key);
     }
     private Button functionButton(String key) {
         Button b;
-        switch (key) {
-            case "clear": b = keyButton("全清", () -> clear(getCurrentInputConnection())); longPress(b,this::settings); return b;
-            case "combo": return customButton(true);
-            case "letter": return customButton(false);
-            case "minus": return inputButton("−", () -> commit("-"));
-            default: return keyButton("退格", this::backspace);
+        if(key.startsWith("custom")) {
+            int slot=Integer.parseInt(key.substring(6)); String value=prefs.customs().current(slot);
+            b=keyButton(value,()->commit(value));
+            b.setContentDescription(value+"，"+functionName(key)+"，长按选择公共库");
+            longPress(b,()->candidates(slot,false));
+        } else switch(key) {
+            case "clear": b=keyButton("全清",()->clear(getCurrentInputConnection())); longPress(b,this::settings); break;
+            case "minus": b=inputButton("−",()->commit("-")); break;
+            case "delete": b=keyButton("退格",this::backspace); break;
+            case "search": b=keyButton("搜索",this::search); b.setTextColor(Color.rgb(120,221,208)); break;
+            default: b=inputButton(key,()->commit(key));
         }
-    }
-    private Button customButton(boolean first) {
-        Button b = keyButton(prefs.current(first), () -> commit(prefs.current(first)));
-        fitContent(b);
-        b.setContentDescription(prefs.current(first) + "，长按选择或编辑自定义");
-        longPress(b, () -> candidates(first,false));
-        return b;
+        fitContent(b); return b;
     }
     private void fitContent(Button b) {
         b.setMaxLines(2);
         b.setPadding(dp(3),0,dp(3),0);
         b.setAutoSizeTextTypeUniformWithConfiguration(8, Math.max(12,Math.round(21*unit)), 1, android.util.TypedValue.COMPLEX_UNIT_SP);
     }
-    private void editCandidate(boolean first, String original) {
+    private void editCandidate(String original) {
         android.content.Intent intent = new android.content.Intent(this, CandidateEditorActivity.class);
-        intent.putExtra("first",first);
         if (original != null) intent.putExtra("original",original);
         intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(intent);
     }
     private void openLayoutEditor() {
-        layoutDraft = prefs.functionOrder(); layoutRight = prefs.functionsOnRight(); layoutEditor();
+        layoutDraft=prefs.gridLayout(); selectedLayoutKey=null; layoutEditor();
+    }
+    private void moveLayout(String source,int target) {
+        List<String> moved=KeyLayout.move(layoutDraft,source,target);
+        if(moved==null) { Toast.makeText(this,"0 需要同行连续两格，请选择其他位置",Toast.LENGTH_SHORT).show(); return; }
+        layoutDraft=moved; selectedLayoutKey=null; layoutEditor();
     }
     private void layoutEditor() {
         panel(false);
-        LinearLayout header = new LinearLayout(this); root.addView(header,new LinearLayout.LayoutParams(-1,dp(44)));
+        LinearLayout header=new LinearLayout(this); root.addView(header,new LinearLayout.LayoutParams(-1,dp(44)));
         add(header,button("取消",this::settings),1);
-        add(header,button(layoutRight ? "功能列：右侧 ⇄" : "功能列：左侧 ⇄", () -> {layoutRight = !layoutRight; layoutEditor();}),3);
-        TextView hint = new TextView(this); hint.setText("长按功能键拖到目标位置；点击保存生效"); hint.setTextColor(Color.rgb(179,192,205)); hint.setTextSize(12); root.addView(hint);
-        ScrollView scroll = new ScrollView(this); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        LinearLayout preview = new LinearLayout(this); scroll.addView(preview,new ScrollView.LayoutParams(-1,dp(230)));
-        LinearLayout functions = column();
-        for (String key : layoutDraft) {
-            Button item = button("↕ " + functionName(key), () -> {}); item.setTextSize(15);
-            item.setContentDescription("拖动排列" + functionName(key));
-            item.setOnLongClickListener(v -> { feedback(v); return v.startDragAndDrop(ClipData.newPlainText("layout",key),new View.DragShadowBuilder(v),key,0); });
-            item.setOnDragListener((v,event) -> {
+        Button mirror=button("左右镜像",()->{layoutDraft=KeyLayout.mirror(layoutDraft);selectedLayoutKey=null;layoutEditor();}); mirror.setTextSize(16); add(header,mirror,2);
+        TextView hint=new TextView(this); hint.setText("长按拖动换位，落点高亮；也可依次点选两个键。0 始终占两格。"); hint.setTextSize(12); hint.setTextColor(Color.rgb(179,192,205)); root.addView(hint);
+        ScrollView scroll=new ScrollView(this); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        KeyboardGrid grid=new KeyboardGrid(this); scroll.addView(grid,new ScrollView.LayoutParams(-1,dp(300)));
+        for(int i=0;i<25;i++) {
+            String key=layoutDraft.get(i); if(key.equals("tail")) continue;
+            final int position=i;
+            Button item=button(keyLabel(key),()->{
+                if(selectedLayoutKey==null) {selectedLayoutKey=key;layoutEditor();}
+                else moveLayout(selectedLayoutKey,position);
+            });
+            fitContent(item); item.setContentDescription("调整位置："+functionName(key));
+            if(key.equals(selectedLayoutKey)) item.setTextColor(Color.rgb(120,221,208));
+            item.setOnLongClickListener(v->{selectedLayoutKey=null;return v.startDragAndDrop(ClipData.newPlainText("layout",key),new View.DragShadowBuilder(v),key,0);});
+            item.setOnDragListener((v,event)->{
                 switch(event.getAction()) {
                     case DragEvent.ACTION_DRAG_STARTED: return event.getLocalState() instanceof String && layoutDraft.contains((String)event.getLocalState());
-                    case DragEvent.ACTION_DRAG_ENTERED: v.setAlpha(.5f); return true;
+                    case DragEvent.ACTION_DRAG_ENTERED: v.setAlpha(.45f); return true;
                     case DragEvent.ACTION_DRAG_EXITED:
                     case DragEvent.ACTION_DRAG_ENDED: v.setAlpha(1f); return true;
                     case DragEvent.ACTION_DROP:
-                        String source = (String)event.getLocalState();
-                        int target = layoutDraft.indexOf(key);
-                        if (target >= 0 && layoutDraft.remove(source)) { layoutDraft.add(target,source); host.post(this::layoutEditor); }
-                        return true;
+                        String source=(String)event.getLocalState(); host.post(()->moveLayout(source,position)); return true;
                     default: return true;
                 }
             });
-            add(functions,item,1);
+            grid.put(item,i,key.equals("0")?2:1);
         }
-        LinearLayout numbers = column();
-        for (String label : new String[]{"1    2    3", "4    5    6", "7    8    9", "0       搜索"}) {
-            TextView text = new TextView(this); text.setText(label); text.setTextSize(18); text.setTextColor(Color.rgb(179,192,205)); text.setGravity(Gravity.CENTER); add(numbers,text,1);
-        }
-        if (!layoutRight) add(preview,functions,2);
-        add(preview,numbers,3);
-        if (layoutRight) add(preview,functions,2);
-        LinearLayout actions = new LinearLayout(this); root.addView(actions,new LinearLayout.LayoutParams(-1,dp(44)));
-        Button reset = button("恢复默认", () -> { layoutRight = false; layoutDraft = Preferences.defaultOrder(); layoutEditor(); }); reset.setTextSize(16); add(actions,reset,1);
-        add(actions,button("保存", () -> { prefs.saveLayout(layoutRight,layoutDraft); showKeyboard(); }),1);
+        LinearLayout actions=new LinearLayout(this); root.addView(actions,new LinearLayout.LayoutParams(-1,dp(44)));
+        Button reset=button("恢复默认",()->{layoutDraft=KeyLayout.defaults();selectedLayoutKey=null;layoutEditor();}); reset.setTextSize(16); add(actions,reset,1);
+        add(actions,button("保存",()->{prefs.saveGridLayout(layoutDraft);showKeyboard();}),1);
     }
     private void toolbar(String title, String action, Runnable run) {
         LinearLayout bar = new LinearLayout(this); root.addView(bar,new LinearLayout.LayoutParams(-1,dp(44)));
         add(bar,button("返回",this::showKeyboard),1); add(bar,button(title,()->{}),2); if(action != null) add(bar,button(action,run),1);
     }
-    private void candidates(boolean combo, boolean editing) {
-        panel(false); toolbar(combo ? "自定义 1" : "自定义 2", editing ? "完成" : "编辑", () -> candidates(combo,!editing));
-        ScrollView scroll = new ScrollView(this); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1)); LinearLayout list = column(); scroll.addView(list);
-        for(String value : prefs.list(combo)) {
-            LinearLayout item = column(); list.addView(item);
-            LinearLayout row = new LinearLayout(this); item.addView(row,new LinearLayout.LayoutParams(-1,dp(48)));
-            Button select = button((value.equals(prefs.current(combo)) ? "✓ " : "") + value, () -> {prefs.select(combo,value); if(!editing) showKeyboard(); else candidates(combo,true);}); fitContent(select); add(row,select,3);
+    private void candidates(int slot, boolean editing) {
+        panel(false); toolbar("公共库 · "+(slot+1),editing?"完成":"编辑",()->candidates(slot,!editing));
+        ScrollView scroll=new ScrollView(this); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        LinearLayout list=column(); scroll.addView(list);
+        for(String value:prefs.customs().items()) {
+            LinearLayout item=column(); list.addView(item);
+            Button select=button((value.equals(prefs.customs().current(slot))?"✓ ":"")+value,()->{prefs.customs().select(slot,value);if(editing)candidates(slot,true);else showKeyboard();});
+            fitContent(select); item.addView(select,new LinearLayout.LayoutParams(-1,dp(48)));
             if(editing) {
-                LinearLayout actions = new LinearLayout(this); item.addView(actions,new LinearLayout.LayoutParams(-1,dp(44)));
-                Button modify = button("修改", () -> editCandidate(combo,value)); modify.setTextSize(13); add(actions,modify,1);
-                Button handle = button("↕",()->Toast.makeText(this,"长按此处，拖到目标候选上松开",Toast.LENGTH_SHORT).show()); handle.setContentDescription("长按拖动排序 "+value);
+                LinearLayout actions=new LinearLayout(this); item.addView(actions,new LinearLayout.LayoutParams(-1,dp(44)));
+                Button modify=button("修改",()->editCandidate(value)); modify.setTextSize(14); add(actions,modify,1);
+                Button handle=button("↕",()->Toast.makeText(this,"长按拖动排序，所有自定义键共用此顺序",Toast.LENGTH_SHORT).show());
+                handle.setContentDescription("长按拖动排序 "+value);
                 longPress(handle,()->handle.startDragAndDrop(ClipData.newPlainText("candidate",value),new View.DragShadowBuilder(handle),value,0)); add(actions,handle,1);
-                add(actions,button("删除",()->{ List<String> values=prefs.list(combo); if(values.size()==1) { Toast.makeText(this,"至少保留一个候选",Toast.LENGTH_SHORT).show(); return; } values.remove(value); prefs.save(combo,values); candidates(combo,true); }),1);
-                item.setOnDragListener((v,event)-> {
-                    if(event.getAction()==DragEvent.ACTION_DRAG_STARTED) return event.getLocalState() instanceof String;
-                    if(event.getAction()==DragEvent.ACTION_DROP) { List<String> values=prefs.list(combo); String source=(String)event.getLocalState(); int target=values.indexOf(value); if(values.remove(source)) { values.add(target,source); prefs.save(combo,values); host.post(()->candidates(combo,true)); } }
+                Button remove=button("删除",()->deleteCandidate(slot,value)); remove.setTextSize(14); add(actions,remove,1);
+                item.setOnDragListener((v,event)->{
+                    if(event.getAction()==DragEvent.ACTION_DRAG_STARTED) return event.getLocalState() instanceof String && prefs.customs().items().contains(event.getLocalState());
+                    if(event.getAction()==DragEvent.ACTION_DRAG_ENTERED) v.setAlpha(.5f);
+                    if(event.getAction()==DragEvent.ACTION_DRAG_EXITED || event.getAction()==DragEvent.ACTION_DRAG_ENDED) v.setAlpha(1f);
+                    if(event.getAction()==DragEvent.ACTION_DROP) {
+                        List<String> values=prefs.customs().items(); String source=(String)event.getLocalState(); int target=values.indexOf(value);
+                        if(target>=0 && values.remove(source)) {values.add(target,source);prefs.customs().reorder(values);host.post(()->candidates(slot,true));}
+                    }
                     return true;
                 });
             }
         }
-        if(editing) { Button add = button("＋ 添加自定义",()->editCandidate(combo,null)); root.addView(add,new LinearLayout.LayoutParams(-1,dp(46))); }
+        if(editing) root.addView(button("＋ 添加到公共库",()->editCandidate(null)),new LinearLayout.LayoutParams(-1,dp(46)));
+    }
+    private void deleteCandidate(int slot,String value) {
+        CustomLibrary library=prefs.customs(); List<String> values=library.items();
+        if(values.size()==1) {Toast.makeText(this,"至少保留一个候选",Toast.LENGTH_SHORT).show();return;}
+        List<Integer> users=library.users(value);
+        if(users.isEmpty()) {library.delete(value,null);candidates(slot,true);return;}
+        panel(false);
+        Button cancel=button("取消删除",()->candidates(slot,true)); root.addView(cancel,new LinearLayout.LayoutParams(-1,dp(44)));
+        List<String> names=new ArrayList<>(); for(int user:users) names.add(Integer.toString(user+1));
+        TextView hint=new TextView(this); hint.setText("删除「"+value+"」将影响自定义键 "+String.join("、",names)+"。请选择替代内容，选定后才会删除：");
+        hint.setTextColor(Color.rgb(235,241,247)); hint.setTextSize(14); root.addView(hint);
+        ScrollView scroll=new ScrollView(this); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1)); LinearLayout list=column();scroll.addView(list);
+        for(String replacement:values) if(!replacement.equals(value)) {
+            Button choose=button(replacement,()->{prefs.customs().delete(value,replacement);candidates(slot,true);}); fitContent(choose); list.addView(choose,new LinearLayout.LayoutParams(-1,dp(48)));
+        }
+    }
+    private void resetCustomLibrary() {
+        panel(false); toolbar("恢复公共库",null,null);
+        TextView hint=new TextView(this); hint.setText("这会删除公共库自定义内容并重置全部 10 个自定义键。按键布局、型号库和其他设置不变。");
+        hint.setTextColor(Color.rgb(235,241,247)); hint.setTextSize(16); root.addView(hint);
+        root.addView(button("取消",this::settings),new LinearLayout.LayoutParams(-1,dp(48)));
+        root.addView(button("确认恢复",()->{prefs.resetCandidates();settings();}),new LinearLayout.LayoutParams(-1,dp(48)));
     }
     private void settings() {
         panel(false); toolbar("设置",null,null);
@@ -407,7 +437,8 @@ public class ProductIme extends InputMethodService {
         options.addView(resize,new LinearLayout.LayoutParams(-1,dp(48)));
         Switch vibration=new Switch(this); vibration.setText("按键震动"); vibration.setTextColor(Color.rgb(235,241,247)); vibration.setChecked(prefs.vibration()); vibration.setOnCheckedChangeListener((b,checked)->prefs.vibration(checked)); options.addView(vibration,new LinearLayout.LayoutParams(-1,dp(48)));
         options.addView(button("恢复默认大小",()->{prefs.scale(1);settings();}),new LinearLayout.LayoutParams(-1,dp(48)));
-        options.addView(button("恢复默认候选",()->{prefs.resetCandidates();Toast.makeText(this,"候选已恢复为 zp、c",Toast.LENGTH_SHORT).show();}),new LinearLayout.LayoutParams(-1,dp(48)));
+
+        options.addView(button("恢复默认候选（公共库）",this::resetCustomLibrary),new LinearLayout.LayoutParams(-1,dp(48)));
         options.addView(button("切换其他输入法",()->((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showInputMethodPicker()),new LinearLayout.LayoutParams(-1,dp(48)));
     }
 }

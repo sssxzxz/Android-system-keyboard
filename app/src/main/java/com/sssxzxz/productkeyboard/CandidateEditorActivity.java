@@ -12,7 +12,7 @@ import java.util.List;
 public class CandidateEditorActivity extends Activity {
     private EditText input;
     private Preferences prefs;
-    private boolean first;
+
     private String original;
     private int dp(int n) { return Math.round(n * getResources().getDisplayMetrics().density); }
     private Button action(String label, Runnable run) {
@@ -22,16 +22,16 @@ public class CandidateEditorActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         prefs = new Preferences(this);
-        first = getIntent().getBooleanExtra("first", true);
+
         original = getIntent().getStringExtra("original");
         LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
         ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.addView(content);
         setContentView(scroll);
         TextView title = new TextView(this);
-        title.setText((original == null ? "添加" : "修改") + "自定义 · " + (first ? "1" : "2")); title.setTextSize(24);
+        title.setText((original == null ? "添加" : "修改") + "公共自定义库"); title.setTextSize(24);
         content.addView(title);
         TextView hint = new TextView(this);
-        hint.setText("输入 1–10 个字符，保留大小写和空格。支持中文、数字、符号与表情。\n需要中文或更多字符时，点击下方切换输入法；保存后返回原应用，切回商品键盘即可使用。");
+        hint.setText("所有自定义键共用此库，修改会同步更新引用它的键。输入 1–10 个字符，保留大小写和空格。支持中文、数字、符号与表情。\n需要中文或更多字符时，点击下方切换输入法；保存后返回原应用，切回商品键盘即可使用。");
         content.addView(hint);
         input = new EditText(this); input.setSaveEnabled(false); input.setTextSize(24);
         input.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
@@ -74,11 +74,11 @@ public class CandidateEditorActivity extends Activity {
     private void save() {
         String value = input.getText().toString();
         if (!CustomText.valid(value)) { input.setError("请输入 1–10 个字符"); return; }
-        List<String> values = prefs.list(first);
+        List<String> values = prefs.customs().items();
         if (values.contains(value) && !value.equals(original)) { input.setError("此候选已存在"); return; }
         try {
-            if (original != null) prefs.replace(first, original, value);
-            else { values.add(value); prefs.save(first, values); }
+            if (original != null) prefs.customs().replace(original, value);
+            else prefs.customs().add(value);
             Toast.makeText(this,"已保存自定义",Toast.LENGTH_SHORT).show(); finish();
         } catch (IllegalArgumentException e) { input.setError("候选已变化，请返回后重新编辑"); }
     }

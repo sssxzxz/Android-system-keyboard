@@ -71,7 +71,7 @@ public class OutsideTouchTest extends InstrumentationTestCase {
                     editor[0].requestFocus();
                     ((InputMethodManager)activity.getSystemService(Activity.INPUT_METHOD_SERVICE)).showSoftInput(editor[0],0);
                 });
-                awaitKeyboard(true);
+                awaitKeyboard(true); SystemClock.sleep(400);
                 tap(key("1")); awaitKeyboard(true);
                 Rect area=new Rect();
                 getInstrumentation().runOnMainSync(() -> outside[0].getGlobalVisibleRect(area));
